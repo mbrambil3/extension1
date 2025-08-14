@@ -106,14 +106,14 @@ function setupEventListeners() {
                     return;
                 }
                 const payload = `Arquivo: ${file.name}\n\n${fullText.substring(0, 50000)}`;
-                chrome.runtime.sendMessage({ action: 'generateSummary', text: payload }, (response) => {
+                chrome.runtime.sendMessage({ action: 'generateSummary', text: payload, source: 'pdf', fileName: file.name }, (response) => {
                     if (chrome.runtime.lastError) {
                         showToast('Erro: ' + chrome.runtime.lastError.message, 'error');
                         return;
                     }
                     if (response && response.success) {
-                        showToast('Resumo sendo gerado...', 'success');
-                        setTimeout(() => window.close(), 1200);
+                        showToast('PDF enviado para resumo. Abra o Histórico para acompanhar.', 'success');
+                        // Não fechar automaticamente; instruir o usuário a abrir o histórico
                     } else {
                         showToast(response?.error || 'Falha ao iniciar resumo do PDF', 'error');
                     }
