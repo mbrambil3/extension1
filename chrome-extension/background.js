@@ -84,7 +84,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         saveToHistory(message.text, summary, sender.tab);
         sendResponse({ success: true, summary });
       })
-      .catch(error => sendResponse({ success: false, error: error.message }));
+      .catch(error => {
+        // Trate erros de rede (Failed to fetch) e 503 com mensagem amigável
+        const msg = (error && error.message) ? error.message : 'Falha ao acessar o serviço de IA';
+        let display = msg;
+        if (msg.includes('503') || /UNAVAILABLE/i.test(msg) || /Failed to fetch/i.test(msg)) {
+          display = 'Serviço temporariamente indisponível. Tente novamente em alguns segundos.';
+        }
+        sendResponse({ success: false, error: display });
+      });
     return true; // Mantém o canal de resposta aberto para async
   }
 
