@@ -94,9 +94,16 @@ async function generateSummaryWithGemini(text, settings) {
       break;
   }
   
-  const prompt = `${detailPrompt} do seguinte texto em ${settings.language === 'pt' ? 'português' : 'inglês'}. 
-Organize os pontos principais de forma clara e estruturada:
+  const prompt = `${detailPrompt} do seguinte texto em ${settings.language === 'pt' ? 'português' : 'inglês'}.
 
+Regras de formatação (siga exatamente):
+1) Produza de 3 a 8 pontos principais como lista numerada (1., 2., 3., ...)
+2) Em cada item, comece com um tópico curto (3–8 palavras), seguido de dois pontos e, em seguida, uma explicação breve em uma única frase
+3) Quando for útil, adicione 1–3 subitens iniciados com "- " (hífen e espaço), cada um curto
+4) Não use markdown com **asteriscos**, títulos ou blocos de código
+5) Não envolva a resposta em blocos de código; retorne apenas texto simples estruturado
+
+Texto a resumir:
 ${text.substring(0, 50000)}`; // Limitar texto para evitar exceder limites da API
   
   try {
