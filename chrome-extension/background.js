@@ -6,16 +6,26 @@ let summarySettings = {
   detailLevel: 'medium'
 };
 
-// Carregar configurações ao iniciar
-chrome.runtime.onInstalled.addListener(() => {
+// Carregar configurações ao iniciar e a cada inicialização do service worker
+function loadSettingsFromStorage(callback) {
   chrome.storage.sync.get(['extensionActive', 'summarySettings'], (result) => {
-    if (result.extensionActive !== undefined) {
+    if (result && typeof result.extensionActive !== 'undefined') {
       isExtensionActive = result.extensionActive;
     }
-    if (result.summarySettings) {
+    if (result && result.summarySettings) {
       summarySettings = { ...summarySettings, ...result.summarySettings };
     }
+    if (typeof callback === 'function') callback({ isExtensionActive, summarySettings });
   });
+}
+
+// Inicializações
+loadSettingsFromStorage();
+chrome.runtime.onInstalled.addListener(() => {
+  loadSettingsFromStorage();
+});
+chrome.runtime.onStartup?.addListener?.(() => {
+  loadSettingsFromStorage();
 });
 
 // Escutar atalho de teclado
