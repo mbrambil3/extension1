@@ -1,170 +1,169 @@
-# 📋 INSTRUÇÕES DE INSTALAÇÃO - Auto-Summarizer
+# 📋 INSTRUÇÕES DE INSTALAÇÃO - Auto-Summarizer (VERSÃO CORRIGIDA)
 
-## 🎯 O que é a Auto-Summarizer?
+## 🔧 Correções Implementadas
 
-A Auto-Summarizer é uma extensão inteligente para Google Chrome que gera automaticamente resumos de artigos e PDFs usando a API do Google Gemini. A extensão detecta quando você está lendo um texto longo e cria um resumo conciso que aparece em um painel lateral elegante.
+✅ **API Gemini atualizada** - Endpoint corrigido para `gemini-1.5-flash`  
+✅ **Comunicação entre scripts melhorada** - Melhor tratamento de erros  
+✅ **Logs de debug adicionados** - Para facilitar resolução de problemas  
+✅ **Validação de conteúdo aprimorada** - Extração mais robusta de texto  
+
+---
 
 ## 📦 Instalação Passo a Passo
 
 ### 1. Preparar os Arquivos
 - Certifique-se de que todos os arquivos estão na pasta `/app/chrome-extension/`
-- Verifique se os seguintes arquivos estão presentes:
-  - `manifest.json`
-  - `background.js`
-  - `content.js`
-  - `popup.html`
-  - `popup.js`
-  - `popup.css`
-  - `sidepanel.css`
+- **IMPORTANTE**: Use os arquivos atualizados (versão corrigida)
 
-### 2. Abrir o Google Chrome
-- Abra o navegador Google Chrome
-- Na barra de endereços, digite: `chrome://extensions/`
-- Pressione Enter
+### 2. Instalar no Chrome
+1. Abra o Chrome e vá para `chrome://extensions/`
+2. **Ative o "Modo do desenvolvedor"** (canto superior direito)
+3. Clique em **"Carregar extensão sem compactação"**
+4. Selecione a pasta `/app/chrome-extension/` completa
+5. A extensão deve aparecer sem erros
 
-### 3. Ativar o Modo Desenvolvedor
-- No canto superior direito da página, você verá um botão "Modo do desenvolvedor"
-- **Clique para ATIVAR** o "Modo do desenvolvedor"
-- Novos botões aparecerão na página
+### 3. Verificar Instalação
+- ✅ Status deve mostrar "Ativada" em verde
+- ✅ Não deve haver erros vermelhos
+- ✅ Ícone da extensão aparece na barra
 
-### 4. Carregar a Extensão
-- Clique no botão **"Carregar extensão sem compactação"**
-- Navegue até a pasta `/app/chrome-extension/` no seu computador
-- **Selecione a pasta inteira** (não os arquivos individuais)
-- Clique em "Selecionar pasta" ou "OK"
+## 🧪 Testes Pós-Instalação
 
-### 5. Verificar a Instalação
-- A extensão "Auto-Summarizer" deve aparecer na lista de extensões
-- Você deve ver o status "Ativada" em verde
-- Se houver erros, eles aparecerão em vermelho
+### Teste 1: Conexão API
+1. **Clique no ícone da extensão**
+2. Clique em **"🔗 Testar Conexão API"**
+3. **RESULTADO ESPERADO**: "✅ Conexão OK! API funcionando"
 
-### 6. Fixar a Extensão (Recomendado)
-- Clique no ícone de **quebra-cabeça** na barra do Chrome (ícone de extensões)
-- Encontre "Auto-Summarizer" na lista
-- Clique no ícone de **alfinete** para fixar a extensão na barra
+### Teste 2: Resumo Manual
+1. Abra o arquivo **`teste.html`** no Chrome (arrastar para o navegador)
+2. **Pressione `Ctrl+Shift+S`** ou clique no ícone da extensão → "Gerar Resumo Agora"
+3. **RESULTADO ESPERADO**: Painel lateral aparece com resumo do texto
 
-## 🚀 Primeiros Passos
+### Teste 3: Resumo Automático
+1. Com resumo automático ativado (padrão)
+2. Navegue para **Wikipedia** ou site de notícias com artigo longo
+3. **RESULTADO ESPERADO**: Painel aparece automaticamente
 
-### Teste Inicial
-1. **Clique no ícone da extensão** na barra do Chrome
-2. Clique em **"Testar Conexão API"** para verificar se tudo funciona
-3. Se o teste for bem-sucedido, você verá "Conexão OK!"
+## 🔍 Solução de Problemas
 
-### Configurações Básicas
-1. **Resumo Automático**: Deixe ativado para resumos automáticos
-2. **Idioma**: Escolha "Português" para resumos em português
-3. **Nível de Detalhe**: Recomendo começar com "Médio"
+### ❌ Problema: "Erro na API: 404"
+**SOLUÇÃO APLICADA**:
+- ✅ Endpoint atualizado para `gemini-1.5-flash`
+- ✅ Safety settings adicionados
+- ✅ Melhor tratamento de erro HTTP
 
-### Primeiro Uso
-1. Navegue para qualquer artigo online (ex: Wikipedia, notícias)
-2. A extensão detectará automaticamente textos longos
-3. Um painel aparecerá no lado direito com o resumo
-4. Use `Ctrl+Shift+S` para gerar resumos manualmente
+### ❌ Problema: "Erro ao comunicar com a página"
+**SOLUÇÕES APLICADAS**:
+- ✅ Melhor sincronização entre scripts
+- ✅ Verificação de `chrome.runtime.lastError`
+- ✅ Logs de debug adicionados
+- ✅ Timeout aumentado para 2 segundos na inicialização
 
-## 🔧 Funcionalidades Principais
+### 🛠️ Debug (Se ainda houver problemas)
 
-### ⚡ Resumo Automático
-- Detecta automaticamente artigos e textos longos (>300 palavras)
-- Gera resumos instantâneos sem intervenção
-- Funciona em qualquer site com conteúdo textual
+#### Verificar Console do Background:
+1. Vá para `chrome://extensions/`
+2. Encontre "Auto-Summarizer"
+3. Clique em **"service worker"** ou **"background page"**
+4. Abra o **Console** para ver logs
 
-### 📄 Suporte a PDFs
-- Extrai texto de documentos PDF automaticamente
-- Gera resumos de documentos acadêmicos e artigos
-- Funciona com PDFs abertos no navegador
+#### Verificar Console da Página:
+1. Na página onde está testando
+2. Pressione **F12**
+3. Vá para aba **Console**
+4. Procure por mensagens da extensão
 
-### 🎨 Interface Elegante
-- Painel lateral que ocupa máximo 30% da tela
-- Design moderno com suporte a modo claro/escuro
-- Animações suaves e não-intrusivas
+#### Logs Esperados:
+```
+Fazendo chamada para API Gemini...
+Resposta da API: 200
+Dados recebidos: [objeto com resumo]
+```
 
-### ⌨️ Atalhos de Teclado
-- **Ctrl+Shift+S**: Gerar resumo manualmente
-- Funciona em qualquer página
+## 🎯 URLs de Teste Recomendadas
 
-### ⚙️ Configurações Personalizáveis
-- **Ligar/Desligar**: Controle total sobre quando usar
-- **Idioma**: Português ou Inglês
-- **Detalhe**: Breve, Médio ou Detalhado
+### Sites que Funcionam Bem:
+- **Wikipedia**: `https://pt.wikipedia.org/wiki/Intelig%C3%AAncia_artificial`
+- **G1 Notícias**: Qualquer artigo longo
+- **Medium**: Artigos técnicos
+- **Blog posts**: Com mais de 500 palavras
 
-## 🛠️ Solução de Problemas
+### Teste com PDF:
+- Abra qualquer PDF no Chrome
+- A extensão deve extrair texto automaticamente
 
-### ❌ Erro: "Não foi possível carregar a extensão"
-**Solução:**
-- Verifique se todos os arquivos estão na pasta
-- Certifique-se que o `manifest.json` está válido
-- Reative o "Modo desenvolvedor"
+## ⚙️ Configurações Recomendadas
 
-### ❌ Extensão instalada mas não funciona
-**Solução:**
-- Clique em "Recarregar" na página de extensões
-- Feche e abra o Chrome novamente
-- Teste a conexão API no popup da extensão
+### Primeira Configuração:
+1. **Resumo Automático**: ✅ Ativado
+2. **Idioma**: Português
+3. **Nível de Detalhe**: Médio
 
-### ❌ Resumos não são gerados
-**Soluções:**
-1. Verifique se o site tem texto suficiente (>300 palavras)
-2. Teste com `Ctrl+Shift+S` manualmente
-3. Verifique se a extensão está ativada nas configurações
-4. Teste a conexão API no popup
+### Para Debug/Teste:
+- Abra **DevTools** (F12) para ver logs
+- Use **`teste.html`** incluído na extensão
+- Teste tanto manual quanto automático
 
-### ❌ Painel lateral não aparece
-**Soluções:**
-- Verifique se não há outros elementos bloqueando
-- Use o atalho `Ctrl+Shift+S`
-- Recarregue a página e tente novamente
-- Verifique as configurações de zoom da página
+## 📞 Se Ainda Houver Problemas
 
-## 📝 Dicas de Uso
+### Passos de Diagnóstico:
 
-### 📚 Melhores Sites para Testar
-- **Wikipedia**: Artigos longos e bem estruturados
-- **Sites de notícias**: Artigos jornalísticos
-- **Blogs técnicos**: Conteúdo especializado
-- **PDFs acadêmicos**: Pesquisas e artigos científicos
+1. **Recarregar Extensão**:
+   - Vá para `chrome://extensions/`
+   - Clique no ícone de **"Recarregar"** na extensão
 
-### 🎯 Como Obter Melhores Resumos
-1. **Use textos bem estruturados** com parágrafos claros
-2. **Textos mais longos** geram resumos mais precisos
-3. **Escolha o nível de detalhe** adequado ao conteúdo
-4. **Configure o idioma correto** para melhores resultados
+2. **Verificar Permissões**:
+   - A extensão deve ter acesso a "todas as abas"
+   - Deve mostrar permissões para `<all_urls>`
 
-### ⚡ Otimização de Uso
-- **Desative resumo automático** se preferir controle manual
-- **Use atalhos de teclado** para workflow mais rápido
-- **Teste diferentes níveis** de detalhe conforme necessário
+3. **Teste em Aba Anônima**:
+   - Abra janela anônima
+   - Ative a extensão para modo anônimo
+   - Teste novamente
 
-## 🔒 Privacidade e Dados
+4. **Limpar Cache**:
+   - `chrome://extensions/`
+   - Remover extensão
+   - Adicionar novamente
 
-- ✅ **Dados não são armazenados** em servidores externos
-- ✅ **Processamento local** na extensão
-- ✅ **Comunicação segura** com API Gemini via HTTPS
-- ✅ **Permissões mínimas** necessárias
-- ✅ **Sem rastreamento** de atividade do usuário
+### Informações para Debug:
+- **Versão do Chrome**: Verifique se é 88+
+- **Sistema Operacional**: Windows/Mac/Linux
+- **Console Errors**: Copie mensagens de erro exatas
+- **URL de Teste**: Qual site estava usando
 
-## 📞 Suporte
+## 🎉 Funcionalidades Disponíveis Após Instalação
 
-Se você encontrar problemas ou tiver dúvidas:
+### ⚡ Automático:
+- Detecta artigos longos (>300 palavras)
+- Gera resumo sem intervenção
+- Aparece em painel lateral elegante
 
-1. **Verifique primeiro** esta documentação
-2. **Teste a conexão API** no popup da extensão  
-3. **Recarregue a extensão** se necessário
-4. **Reinicie o Chrome** como último recurso
+### 🎮 Manual:
+- **`Ctrl+Shift+S`**: Atalho universal
+- **Botão no popup**: Gerar resumo agora
+- **Configurações**: Personalizar comportamento
+
+### 📱 Interface:
+- **Painel lateral**: Máximo 30% da tela
+- **Modo escuro/claro**: Automático
+- **Animações suaves**: Experiência premium
+- **Copiar texto**: Um clique para copiar resumo
 
 ---
 
-## ✅ Checklist de Instalação
+## ✅ Checklist Final
 
-- [ ] Google Chrome atualizado
-- [ ] Arquivos da extensão baixados
+- [ ] Chrome atualizado (versão 88+)
+- [ ] Extensão instalada sem erros
 - [ ] Modo desenvolvedor ativado
-- [ ] Extensão carregada sem erros
-- [ ] Teste de API realizado com sucesso
-- [ ] Configurações personalizadas conforme preferência
-- [ ] Primeiro teste em site real realizado
+- [ ] Teste de API com sucesso ✅
+- [ ] Teste manual funcionando (Ctrl+Shift+S)
+- [ ] Teste automático funcionando
+- [ ] Console sem erros críticos
 
-**🎉 Parabéns! Sua Auto-Summarizer está pronta para uso!**
+**🎯 Se todos os itens estão ✅, a extensão está funcionando perfeitamente!**
 
 ---
 
-*Versão 1.0.0 - Desenvolvido com Gemini AI*
+*Versão 1.1 - Problemas Corrigidos - Janeiro 2025*
