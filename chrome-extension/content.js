@@ -24,6 +24,24 @@ function initializeExtension() {
   });
 }
 
+// Checagem rápida se é possível iniciar extração
+function quickCanStartExtraction() {
+  const url = window.location.href;
+  // PDF cases
+  const isPdfUrl = /\.pdf($|\?|#)/i.test(url);
+  const hasPdfEmbed = document.querySelector('embed[type="application/pdf"], object[type="application/pdf"]');
+  if (isPdfUrl || hasPdfEmbed) {
+    // Se PDF.js do site estiver presente, conseguimos extrair
+    if (window.PDFViewerApplication && window.PDFViewerApplication.pdfDocument) {
+      return { canStart: true };
+    }
+    // Viewer nativo do Chrome geralmente não disponibiliza texto
+    return { canStart: false, reason: 'PDF aberto no visualizador nativo do Chrome não permite extração de texto direta. Ative "Permitir acesso a URLs de arquivo" nas configurações da extensão e, se persistir, use a opção de histórico ou aguarde a versão com importação de PDF.' };
+  }
+  // Páginas web normais: normalmente conseguimos extrair
+  return { canStart: true };
+}
+
 // Escutar mensagens do background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('Mensagem recebida no content script:', message);
@@ -31,16 +49,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "generateSummary") {
     if (!isExtensionReady) {
       setTimeout(() => {
-        detectAndExtractContent(true);
-        sendResponse({ received: true });
+        const check = quickCanStartExtraction();
+        if (!check.canStart) {
+          showErrorPanel(check.reason);
+          sendResponse({ received: true, started: false, errorMessage: check.reason });
+        } else {
+          detectAndExtractContent(true);
+          sendResponse({ received: true, started: true });
+        }
       }, 1000);
       return true;
     }
     
+    const check = quickCanStartExtraction();
+    if (!check.canStart) {
+      showErrorPanel(check.reason);
+      sendResponse({ received: true, started: false, errorMessage: check.reason });
+      return true;
+    }
+
     if (message.manual || !sidePanelVisible) {
       detectAndExtractContent(true);
     }
-    sendResponse({ received: true });
+    sendResponse({ received: true, started: true });
     return true;
   }
 });
@@ -79,14 +110,16 @@ async function extractPDFContent(forceGenerate = false) {
         if (forceGenerate || shouldAutoSummarize(fullText)) {
           generateSummary(fullText);
         }
+      } else {
+        showErrorPanel('Não foi possível extrair texto suficiente do PDF.');
       }
     } else {
-      // Fallback: tentar extrair texto visível da página
-      extractWebPageContent(forceGenerate);
+      // Viewer nativo do Chrome: mostrar orientação
+      showErrorPanel('Este PDF parece estar aberto no visualizador nativo do Chrome, que não disponibiliza texto para extração. Em chrome://extensions, ative "Permitir acesso a URLs de arquivo" para esta extensão e recarregue. Se o problema persistir, aguarde a versão com importação direta de PDF.');
     }
   } catch (error) {
     console.error('Erro ao extrair PDF:', error);
-    extractWebPageContent(forceGenerate); // Fallback
+    showErrorPanel('Erro ao extrair conteúdo do PDF.');
   }
 }
 
@@ -310,6 +343,7 @@ function showSummaryPanel(summary) {
 
 // Mostrar painel de erro
 function showErrorPanel(error) {
+  createSidePanel();
   const panel = document.getElementById('auto-summarizer-panel');
   const content = panel.querySelector('.panel-content');
   
@@ -317,16 +351,9 @@ function showErrorPanel(error) {
     <div class="error-container">
       <h3>⚠️ Erro ao Gerar Resumo</h3>
       <p>${error}</p>
-      <button id="retry-summary" class="retry-btn">Tentar Novamente</button>
       <button id="close-panel" class="action-btn">Fechar</button>
     </div>
   `;
-  
-  document.getElementById('retry-summary').addEventListener('click', () => {
-    if (extractedText) {
-      generateSummary(extractedText);
-    }
-  });
   
   document.getElementById('close-panel').addEventListener('click', hidePanel);
   

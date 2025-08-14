@@ -1,5 +1,12 @@
 // JavaScript para o popup da extensão
 document.addEventListener('DOMContentLoaded', function() {
+    // Atualizar versão dinamicamente a partir do manifest
+    try {
+        const { version } = chrome.runtime.getManifest();
+        const verEl = document.querySelector('.version');
+        if (verEl && version) verEl.textContent = 'v' + version;
+    } catch (e) { /* noop */ }
+
     loadSettings();
     setupEventListeners();
 });
@@ -97,9 +104,14 @@ function generateSummaryNow() {
                 }
                 
                 if (response && response.received) {
-                    showToast('Resumo sendo gerado...', 'success');
-                    // Fechar popup após iniciar o processo
-                    setTimeout(() => window.close(), 1500);
+                    if (response.started) {
+                        showToast('Resumo sendo gerado...', 'success');
+                        // Fechar popup apenas se o processo realmente iniciou no content script
+                        setTimeout(() => window.close(), 1200);
+                    } else {
+                        // Não fechar, mostrar causa
+                        showToast(response.errorMessage || 'Conteúdo não suportado para extração direta', 'warning');
+                    }
                 } else {
                     showToast('A página pode não ter conteúdo suficiente', 'warning');
                 }
