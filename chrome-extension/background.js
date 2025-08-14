@@ -97,6 +97,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         else { await saveToHistory(message.text, summary, sender.tab); sendResponse({ success: true, summary, title: sender?.tab?.title || 'Página', modelUsed }); }
       } catch (error) {
         const msg = (error && error.message) ? error.message : 'Falha ao acessar o serviço de IA';
+        const status = (error && error.status) ? String(error.status) : (msg.match(/\b(\d{3})\b/) || [])[1];
+        // Tratamento dedicado para credenciais inválidas
+        if (status === '401' || /User not found/i.test(msg)) {
+          sendResponse({ success: false, error: 'Sua OpenRouter API Key parece inválida. Abra o popup e informe sua própria chave.' });
+          return;
+        }
         if (/429/.test(msg)) await setCooldown(20000);
         let display = msg;
         if (msg.includes('503') || /UNAVAILABLE/i.test(msg) || /Failed to fetch/i.test(msg)) display = 'Serviço temporariamente indisponível. Tente novamente em alguns segundos.';
