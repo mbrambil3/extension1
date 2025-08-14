@@ -11,11 +11,6 @@ document.addEventListener('DOMContentLoaded', function() {
     setupEventListeners();
 });
 
-function toggleOpenRouterKeyRow(provider) {
-    const row = document.getElementById('openrouterKeyRow');
-    row.style.display = provider === 'deepseek' ? 'block' : 'none';
-}
-
 // Carregar configurações salvas
 function loadSettings() {
     chrome.runtime.sendMessage({ action: "getSettings" }, (response) => {
@@ -23,9 +18,6 @@ function loadSettings() {
             document.getElementById('autoSummary').checked = response.settings.autoSummary;
             document.getElementById('language').value = response.settings.language;
             document.getElementById('detailLevel').value = response.settings.detailLevel;
-            document.getElementById('provider').value = response.settings.provider || 'gemini';
-            document.getElementById('openrouterKey').value = response.settings.openrouterKey || '';
-            toggleOpenRouterKeyRow(response.settings.provider || 'gemini');
             updateStatusIndicator(response.isActive);
         }
     });
@@ -40,13 +32,6 @@ function setupEventListeners() {
         saveSettings();
     });
     document.getElementById('detailLevel').addEventListener('change', function() {
-        saveSettings();
-    });
-    document.getElementById('provider').addEventListener('change', function(e) {
-        toggleOpenRouterKeyRow(e.target.value);
-        saveSettings();
-    });
-    document.getElementById('openrouterKey').addEventListener('change', function() {
         saveSettings();
     });
 
@@ -118,9 +103,7 @@ function saveSettings() {
     const settings = {
         autoSummary: document.getElementById('autoSummary').checked,
         language: document.getElementById('language').value,
-        detailLevel: document.getElementById('detailLevel').value,
-        provider: document.getElementById('provider').value,
-        openrouterKey: document.getElementById('openrouterKey').value
+        detailLevel: document.getElementById('detailLevel').value
     };
     
     chrome.runtime.sendMessage({
