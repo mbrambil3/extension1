@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Auto-Summarizer - Resumos instantâneos",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Gera automaticamente resumos de artigos e PDFs usando IA",
   
   "icons": {
@@ -48,7 +48,10 @@
   
   "web_accessible_resources": [
     {
-      "resources": ["sidepanel.html", "sidepanel.css", "gemini-api.js", "history.html", "history.css", "history.js"],
+      "resources": [
+        "history.html", "history.css", "history.js",
+        "pdfjs/pdf.min.js", "pdfjs/pdf.worker.min.js"
+      ],
       "matches": ["<all_urls>"]
     }
   ]
