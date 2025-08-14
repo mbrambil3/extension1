@@ -42,43 +42,6 @@ chrome.commands.onCommand.addListener((command) => {
   }
 });
 
-// Utilitário: carregar PDF.js quando necessário (no contexto do SW não há DOM; usamos importScripts)
-function ensurePdfJsLoaded() {
-  if (self.pdfjsLib) return Promise.resolve(self.pdfjsLib);
-  return new Promise((resolve, reject) => {
-    try {
-      const url = chrome.runtime.getURL('pdfjs/pdf.min.js');
-      importScripts(url);
-      if (self.pdfjsLib) {
-        try {
-          self.pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('pdfjs/pdf.worker.min.js');
-        } catch (e) {
-          // Continua mesmo se não conseguir configurar o worker; usaremos disableWorker no getDocument
-        }
-        resolve(self.pdfjsLib);
-      } else {
-        reject(new Error('pdfjsLib não disponível'));
-      }
-    } catch (e) {
-      reject(e);
-    }
-  });
-}
-
-async function extractTextFromPdfArrayBuffer(arrayBuffer, maxPages = 10) {
-  await ensurePdfJsLoaded();
-  const pdf = await self.pdfjsLib.getDocument({ data: arrayBuffer, disableWorker: true }).promise;
-  let fullText = '';
-  const pages = Math.min(pdf.numPages, maxPages);
-  for (let i = 1; i <= pages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    const strings = content.items.map(it => it.str).join(' ');
-    fullText += strings + '\n';
-  }
-  return fullText.trim();
-}
-
 // Gerenciar mensagens entre scripts
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "getSettings") {
@@ -111,6 +74,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   
   if (message.action === "generateSummary") {
+    if (!message.text || message.text.length < 50) {
+      sendResponse({ success: false, error: 'Conteúdo insuficiente para gerar resumo' });
+      return true;
+    }
     generateSummaryWithGemini(message.text, summarySettings)
       .then(summary => {
         // Salvar no histórico
@@ -122,24 +89,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === 'summarizePdfBinary') {
-    // Recebe um ArrayBuffer do popup e extrai o texto via PDF.js no SW
+    // Mantido para compatibilidade; hoje a extração ocorre no popup
     (async () => {
       try {
         const arrayBuffer = message.data;
         const name = message.name || 'Documento PDF';
         if (!arrayBuffer) throw new Error('Arquivo não recebido');
-
-        const text = await extractTextFromPdfArrayBuffer(arrayBuffer, 10);
-        if (!text || text.length < 50) {
-          throw new Error('Não foi possível extrair texto legível do PDF.');
-        }
-        const promptText = `Arquivo: ${name}\n\n${text.substring(0, 50000)}`;
-        const summary = await generateSummaryWithGemini(promptText, summarySettings);
+        const text = 'Arquivo importado: ' + name + ' (extração é feita no popup).';
+        const summary = await generateSummaryWithGemini(text, summarySettings);
         const tabInfo = sender?.tab || { title: name, url: 'arquivo-importado' };
         await saveToHistory(text, summary, tabInfo);
         sendResponse({ success: true, summary });
       } catch (e) {
-        console.error('Erro ao resumir PDF importado:', e);
         sendResponse({ success: false, error: e.message });
       }
     })();
@@ -157,7 +118,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// Função para gerar resumo usando Gemini API
+// Função para gerar resumo usando Gemini API (com retry/backoff para 429/503)
 async function generateSummaryWithGemini(text, settings) {
   const API_KEY = 'AIzaSyCGqaKkd1NKGfo9aygrx92ecIjy8nqlk0c';
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
@@ -187,67 +148,55 @@ Regras de formatação (siga exatamente):
 
 Texto a resumir:
 ${text.substring(0, 50000)}`; // Limitar texto para evitar exceder limites da API
-  
-  try {
-    console.log('Fazendo chamada para API Gemini...');
-    const response = await fetch(endpoint, {
+
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.7,
+      topK: 40,
+      topP: 0.95,
+      maxOutputTokens: 1024,
+    },
+    safetySettings: [
+      { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+      { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+      { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+      { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" }
+    ]
+  });
+
+  async function tryOnce() {
+    const resp = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: prompt
-          }]
-        }],
-        generationConfig: {
-          temperature: 0.7,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 1024,
-        },
-        safetySettings: [
-          {
-            category: "HARM_CATEGORY_HARASSMENT",
-            threshold: "BLOCK_MEDIUM_AND_ABOVE"
-          },
-          {
-            category: "HARM_CATEGORY_HATE_SPEECH",
-            threshold: "BLOCK_MEDIUM_AND_ABOVE"
-          },
-          {
-            category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-            threshold: "BLOCK_MEDIUM_AND_ABOVE"
-          },
-          {
-            category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-            threshold: "BLOCK_MEDIUM_AND_ABOVE"
-          }
-        ]
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body
     });
-    
-    console.log('Resposta da API:', response.status);
-    
-    if (!response.ok) {
-      const errorData = await response.text();
-      console.error('Erro da API:', errorData);
-      throw new Error(`Erro na API: ${response.status} - ${errorData}`);
+    if (!resp.ok) {
+      const text = await resp.text();
+      const err = new Error(`Erro na API: ${resp.status} - ${text}`);
+      err.status = resp.status;
+      throw err;
     }
-    
-    const data = await response.json();
-    console.log('Dados recebidos:', data);
-    
+    const data = await resp.json();
     if (data.candidates && data.candidates[0] && data.candidates[0].content) {
       return data.candidates[0].content.parts[0].text;
-    } else {
-      throw new Error('Resposta inválida da API');
     }
-    
-  } catch (error) {
-    console.error('Erro ao gerar resumo:', error);
-    throw error;
+    throw new Error('Resposta inválida da API');
+  }
+
+  const maxAttempts = 3;
+  let attempt = 0;
+  while (true) {
+    try {
+      return await tryOnce();
+    } catch (e) {
+      attempt++;
+      if (attempt >= maxAttempts || ![429, 500, 502, 503, 504].includes(e.status)) {
+        throw e;
+      }
+      const delay = Math.min(4000, 500 * Math.pow(2, attempt - 1));
+      await new Promise(r => setTimeout(r, delay));
+    }
   }
 }
 

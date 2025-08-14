@@ -30,6 +30,20 @@ function loadSettings() {
     });
 }
 
+function isRestrictedUrl(url) {
+    return url.startsWith('chrome://') || url.startsWith('chrome-extension://') || url.startsWith('edge://') || url.startsWith('about:') || url.startsWith('view-source:');
+}
+
+async function injectContentScript(tabId) {
+    try {
+        await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+        return true;
+    } catch (e) {
+        console.warn('Falha ao injetar content.js:', e);
+        return false;
+    }
+}
+
 // Configurar event listeners
 function setupEventListeners() {
     // Toggle de resumo automático
@@ -75,7 +89,6 @@ function setupEventListeners() {
                     showToast('PDF.js não carregou. Recarregue a extensão.', 'error');
                     return;
                 }
-                // Usar sem worker para simplificar no contexto do popup
                 try {
                     pdfjs.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('pdfjs/pdf.worker.min.js');
                 } catch (e) { /* opcional */ }
@@ -124,7 +137,7 @@ function saveSettings() {
     
     chrome.runtime.sendMessage({
         action: "updateSettings",
-        isActive: document.getElementById('autoSummary').checked, // manter consistência
+        isActive: document.getElementById('autoSummary').checked,
         settings: settings
     }, (response) => {
         if (response && response.success) {
@@ -135,30 +148,40 @@ function saveSettings() {
     });
 }
 
-// Gerar resumo manualmente
+// Gerar resumo manualmente com fallback de injeção
 function generateSummaryNow() {
     const button = document.getElementById('generateNow');
     button.classList.add('loading');
     button.textContent = 'Gerando...';
     
-    // Enviar mensagem para a aba ativa
-    chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
-        if (tabs[0]) {
-            console.log('Enviando mensagem para tab:', tabs[0].id);
-            
-            chrome.tabs.sendMessage(tabs[0].id, {
-                action: "generateSummary",
-                manual: true
-            }, function(response) {
+    chrome.tabs.query({ active: true, currentWindow: true }, async function(tabs) {
+        const tab = tabs[0];
+        if (!tab) {
+            button.classList.remove('loading');
+            button.textContent = '🎯 Gerar Resumo Agora';
+            showToast('Nenhuma aba ativa encontrada', 'error');
+            return;
+        }
+        if (isRestrictedUrl(tab.url || '')) {
+            button.classList.remove('loading');
+            button.textContent = '🎯 Gerar Resumo Agora';
+            showToast('Esta página não permite injeção de conteúdo (chrome://, etc.)', 'warning');
+            return;
+        }
+
+        function sendGenerate() {
+            chrome.tabs.sendMessage(tab.id, { action: 'generateSummary', manual: true }, function(response) {
                 button.classList.remove('loading');
                 button.textContent = '🎯 Gerar Resumo Agora';
-                
                 if (chrome.runtime.lastError) {
-                    console.error('Erro de runtime:', chrome.runtime.lastError);
-                    showToast('Erro: ' + chrome.runtime.lastError.message, 'error');
+                    const msg = chrome.runtime.lastError.message || '';
+                    if (msg.includes('Receiving end does not exist')) {
+                        showToast('Tentando preparar a página, clique novamente...', 'warning');
+                    } else {
+                        showToast('Erro: ' + msg, 'error');
+                    }
                     return;
                 }
-                
                 if (response && response.received) {
                     if (response.started) {
                         showToast('Resumo sendo gerado...', 'success');
@@ -170,19 +193,31 @@ function generateSummaryNow() {
                     showToast('A página pode não ter conteúdo suficiente', 'warning');
                 }
             });
-        } else {
-            button.classList.remove('loading');
-            button.textContent = '🎯 Gerar Resumo Agora';
-            showToast('Nenhuma aba ativa encontrada', 'error');
         }
+
+        // Tenta enviar; se não houver receiver, injeta e pede para clicar de novo
+        chrome.tabs.sendMessage(tab.id, { ping: true }, async function() {
+            if (chrome.runtime.lastError) {
+                const injected = await injectContentScript(tab.id);
+                // Damos feedback e pedimos novo clique (para segurança)
+                if (injected) {
+                    showToast('Página preparada. Clique novamente em "Gerar Resumo".', 'success');
+                } else {
+                    showToast('Não foi possível preparar a página para resumo', 'error');
+                }
+                button.classList.remove('loading');
+                button.textContent = '🎯 Gerar Resumo Agora';
+                return;
+            }
+            // Receiver existe, podemos enviar
+            sendGenerate();
+        });
     });
 }
 
 // Abrir janela de histórico
 function openHistoryWindow() {
-    chrome.tabs.create({
-        url: chrome.runtime.getURL('history.html')
-    });
+    chrome.tabs.create({ url: chrome.runtime.getURL('history.html') });
 }
 
 // Atualizar indicador de status
@@ -210,24 +245,15 @@ function showToast(message, type = 'success') {
     
     container.appendChild(toast);
     
-    // Animar entrada
-    setTimeout(() => {
-        toast.classList.add('show');
-    }, 100);
-    
-    // Remover após 3 segundos
+    setTimeout(() => { toast.classList.add('show'); }, 100);
     setTimeout(() => {
         toast.classList.remove('show');
-        setTimeout(() => {
-            if (container.contains(toast)) {
-                container.removeChild(toast);
-            }
-        }, 300);
+        setTimeout(() => { if (container.contains(toast)) container.removeChild(toast); }, 300);
     }, 3000);
 }
 
 // Capturar erros de runtime do Chrome
-chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
+chrome.runtime.onMessage.addListener(function(message) {
     if (message.action === "showToast") {
         showToast(message.text, message.type);
     }
