@@ -67,7 +67,7 @@ function ensurePdfJsLoaded() {
 
 async function extractTextFromPdfArrayBuffer(arrayBuffer, maxPages = 10) {
   await ensurePdfJsLoaded();
-  const pdf = await self.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pdf = await self.pdfjsLib.getDocument({ data: arrayBuffer, disableWorker: true }).promise;
   let fullText = '';
   const pages = Math.min(pdf.numPages, maxPages);
   for (let i = 1; i <= pages; i++) {
