@@ -1,175 +1,256 @@
-// Background script para coordenar a extensão (somente DeepSeek via OpenRouter)
+// Background script (OpenRouter only) com cache, cooldown e fallback
 let isExtensionActive = true;
 let summarySettings = {
   autoSummary: true,
   language: 'pt',
-  detailLevel: 'medium'
+  detailLevel: 'medium',
+  openrouterKey: ''
 };
 
-const OPENROUTER_API_KEY = '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';
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const DEFAULT_OR_API_KEY = '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';
+const OR_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const PRIMARY_MODEL = 'deepseek/deepseek-r1-0528:free';
+const FALLBACK_MODEL = 'meta-llama/llama-3.3-70b-instruct:free';
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
-// Carregar configurações ao iniciar e a cada inicialização do service worker
+function getApiKey() {
+  const user = (summarySettings.openrouterKey || '').trim();
+  return user || DEFAULT_OR_API_KEY;
+}
+
 function loadSettingsFromStorage(callback) {
   chrome.storage.sync.get(['extensionActive', 'summarySettings'], (result) => {
-    if (result && typeof result.extensionActive !== 'undefined') {
-      isExtensionActive = result.extensionActive;
-    }
-    if (result && result.summarySettings) {
-      summarySettings = { ...summarySettings, ...result.summarySettings };
-    }
+    if (result && typeof result.extensionActive !== 'undefined') isExtensionActive = result.extensionActive;
+    if (result && result.summarySettings) summarySettings = { ...summarySettings, ...result.summarySettings };
     if (typeof callback === 'function') callback({ isExtensionActive, summarySettings });
   });
 }
 
-// Inicializações
 loadSettingsFromStorage();
-chrome.runtime.onInstalled.addListener(() => { loadSettingsFromStorage(); });
-chrome.runtime.onStartup?.addListener?.(() => { loadSettingsFromStorage(); });
+chrome.runtime.onInstalled.addListener(() => loadSettingsFromStorage());
+chrome.runtime.onStartup?.addListener?.(() => loadSettingsFromStorage());
 
-// Atalho
 chrome.commands.onCommand.addListener((command) => {
-  if (command === "generate_summary") {
+  if (command === 'generate_summary') {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs[0]) {
-        chrome.tabs.sendMessage(tabs[0].id, { action: "generateSummary", manual: true });
-      }
+      if (tabs[0]) chrome.tabs.sendMessage(tabs[0].id, { action: 'generateSummary', manual: true });
     });
   }
 });
 
-// Mensagens
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === "getSettings") {
-    loadSettingsFromStorage(() => {
-      sendResponse({ isActive: isExtensionActive, settings: summarySettings });
-    });
+  if (message.action === 'getSettings') {
+    loadSettingsFromStorage(() => sendResponse({ isActive: isExtensionActive, settings: summarySettings }));
     return true;
   }
-
-  if (message.action === "updateSettings") {
+  if (message.action === 'updateSettings') {
     if (typeof message.isActive === 'boolean') isExtensionActive = message.isActive;
-    if (message.settings && typeof message.settings === 'object') {
-      summarySettings = { ...summarySettings, ...message.settings };
-    }
-    chrome.storage.sync.set({ extensionActive: isExtensionActive, summarySettings }, () => {
-      sendResponse({ success: true, isActive: isExtensionActive, settings: summarySettings });
-    });
+    if (message.settings && typeof message.settings === 'object') summarySettings = { ...summarySettings, ...message.settings };
+    chrome.storage.sync.set({ extensionActive: isExtensionActive, summarySettings }, () => sendResponse({ success: true, isActive: isExtensionActive, settings: summarySettings }));
     return true;
   }
-
-  if (message.action === "generateSummary") {
-    if (!message.text || message.text.length < 50) {
-      sendResponse({ success: false, error: 'Conteúdo insuficiente para gerar resumo' });
-      return true;
-    }
+  if (message.action === 'generateSummary') {
+    if (!message.text || message.text.length < 50) { sendResponse({ success: false, error: 'Conteúdo insuficiente para gerar resumo' }); return true; }
     const fromPdf = message.source === 'pdf';
     const fileName = message.fileName || 'Documento PDF';
 
     (async () => {
       try {
-        const summary = await generateSummaryWithOpenRouter(message.text, summarySettings);
+        // Cooldown global
+        const cooldown = await getCooldown();
+        if (cooldown > Date.now()) {
+          const secs = Math.ceil((cooldown - Date.now()) / 1000);
+          sendResponse({ success: false, error: `Serviço temporariamente indisponível. Aguarde ${secs}s.` });
+          return;
+        }
+        // Cache
+        const key = contentHash(message.text);
+        const cached = await getFromCache(key);
+        if (cached && (Date.now() - cached.timestamp) < CACHE_TTL_MS) {
+          if (fromPdf) {
+            await saveToHistory(message.text, cached.summary, sender.tab, { inferredTitle: cached.title || fileName, source: 'pdf' });
+            sendResponse({ success: true, summary: cached.summary, title: cached.title || fileName });
+          } else {
+            await saveToHistory(message.text, cached.summary, sender.tab);
+            sendResponse({ success: true, summary: cached.summary, title: sender?.tab?.title || 'Página' });
+          }
+          return;
+        }
+
+        let title = null;
+        let summary = null;
         if (fromPdf) {
-          let inferredTitle = null;
-          try { inferredTitle = await generateTitleWithOpenRouter(message.text, summarySettings, fileName); } catch (e) { inferredTitle = null; }
-          await saveToHistory(message.text, summary, sender.tab, { inferredTitle: inferredTitle || fileName, source: 'pdf' });
-          sendResponse({ success: true, summary, title: inferredTitle || fileName });
+          // Uma única chamada retornando TÍTULO + RESUMO
+          const combined = await generatePdfTitleAndSummaryWithOR(message.text);
+          title = combined.title || fileName;
+          summary = combined.summary;
+        } else {
+          summary = await generateSummaryWithOR(message.text);
+        }
+
+        // Salvar cache
+        await saveToCache(key, { title: title || null, summary, timestamp: Date.now(), source: fromPdf ? 'pdf' : 'web' });
+
+        if (fromPdf) {
+          await saveToHistory(message.text, summary, sender.tab, { inferredTitle: title || fileName, source: 'pdf' });
+          sendResponse({ success: true, summary, title: title || fileName });
         } else {
           await saveToHistory(message.text, summary, sender.tab);
           sendResponse({ success: true, summary, title: sender?.tab?.title || 'Página' });
         }
       } catch (error) {
         const msg = (error && error.message) ? error.message : 'Falha ao acessar o serviço de IA';
+        if (/429/.test(msg)) await setCooldown(20000); // 20s
         let display = msg;
-        if (msg.includes('503') || /UNAVAILABLE/i.test(msg) || /Failed to fetch/i.test(msg)) {
-          display = 'Serviço temporariamente indisponível. Tente novamente em alguns segundos.';
-        }
+        if (msg.includes('503') || /UNAVAILABLE/i.test(msg) || /Failed to fetch/i.test(msg)) display = 'Serviço temporariamente indisponível. Tente novamente em alguns segundos.';
         sendResponse({ success: false, error: display });
       }
     })();
-
     return true;
   }
-
-  if (message.action === 'summarizePdfBinary') {
-    // Extração é feita no popup. Mantido para compatibilidade.
-    (async () => {
-      try {
-        const arrayBuffer = message.data;
-        const name = message.name || 'Documento PDF';
-        if (!arrayBuffer) throw new Error('Arquivo não recebido');
-        const text = 'Arquivo importado: ' + name + ' (extração é feita no popup).';
-        const summary = await generateSummaryWithOpenRouter(text, summarySettings);
-        const tabInfo = sender?.tab || { title: name, url: 'arquivo-importado' };
-        await saveToHistory(text, summary, tabInfo, { inferredTitle: name, source: 'pdf' });
-        sendResponse({ success: true, summary });
-      } catch (e) {
-        sendResponse({ success: false, error: e.message });
-      }
-    })();
-    return true;
-  }
-
-  if (message.action === "getHistory") {
-    getHistory().then(history => sendResponse({ history }));
-    return true;
-  }
-
-  if (message.action === "clearHistory") {
-    clearHistory().then(() => sendResponse({ success: true }));
-    return true;
-  }
+  if (message.action === 'getHistory') { getHistory().then(h => sendResponse({ history: h })); return true; }
+  if (message.action === 'clearHistory') { clearHistory().then(() => sendResponse({ success: true })); return true; }
 });
 
-// ===== OpenRouter / DeepSeek =====
-async function generateSummaryWithOpenRouter(text, settings) {
-  const apiKey = OPENROUTER_API_KEY;
-  const userText = buildUserPrompt(text, settings);
-  const payload = {
-    model: 'deepseek/deepseek-r1-0528:free',
-    messages: [
-      { role: 'system', content: 'Você é um assistente de resumo que retorna lista numerada com tópicos curtos e subitens quando necessário.' },
-      { role: 'user', content: userText }
-    ],
-    temperature: 0.7,
-    max_tokens: 1024
-  };
+// ================= OpenRouter helpers =================
+async function orRequest(messages, model) {
   const headers = {
-    'Authorization': `Bearer ${apiKey}`,
+    'Authorization': `Bearer ${getApiKey()}`,
     'Content-Type': 'application/json',
     'HTTP-Referer': chrome.runtime.getURL(''),
     'X-Title': 'Auto-Summarizer DeepSeek'
   };
-  const resp = await fetch(OPENROUTER_URL, { method: 'POST', headers, body: JSON.stringify(payload) });
-  if (!resp.ok) { let detail = await resp.text(); throw new Error(`OpenRouter API error: ${resp.status} - ${detail}`); }
+  const body = JSON.stringify({ model, messages, temperature: 0.7, max_tokens: 1024 });
+  const resp = await fetch(OR_URL, { method: 'POST', headers, body });
+  if (!resp.ok) {
+    const detail = await resp.text();
+    const err = new Error(`OpenRouter API error: ${resp.status} - ${detail}`);
+    err.status = resp.status; throw err;
+  }
   const data = await resp.json();
   const out = data?.choices?.[0]?.message?.content;
   if (!out) throw new Error('Resposta inválida da OpenRouter');
   return out;
 }
 
-async function generateTitleWithOpenRouter(text, settings, fallbackName) {
-  const apiKey = OPENROUTER_API_KEY;
-  const prompt = `Gere um título curto e descritivo (no máximo 10 palavras) para o seguinte conteúdo de arquivo PDF. Não use aspas, não use markdown. Caso seja um documento de empresa, inclua o nome/identificador.\n\nConteúdo (parcial):\n${text.substring(0, 2000)}`;
-  const payload = { model: 'deepseek/deepseek-r1-0528:free', messages: [ { role: 'user', content: prompt } ], temperature: 0.2, max_tokens: 64 };
-  const headers = { 'Authorization': `Bearer ${OPENROUTER_API_KEY}`, 'Content-Type': 'application/json', 'HTTP-Referer': chrome.runtime.getURL(''), 'X-Title': 'Auto-Summarizer DeepSeek' };
-  const resp = await fetch(OPENROUTER_URL, { method: 'POST', headers, body: JSON.stringify(payload) });
-  if (!resp.ok) return fallbackName;
-  const data = await resp.json();
-  return data?.choices?.[0]?.message?.content?.trim() || fallbackName;
+async function orWithFallback(messages) {
+  try {
+    return await orRequest(messages, PRIMARY_MODEL);
+  } catch (e) {
+    if (e.status === 429 || e.status === 503) {
+      // cooldown rápido
+      await setCooldown(20000);
+      return await orRequest(messages, FALLBACK_MODEL);
+    }
+    throw e;
+  }
 }
 
-function buildUserPrompt(text, settings) {
+function buildSummaryInstructions(text) {
   let detailPrompt = '';
-  switch (settings.detailLevel) {
+  switch (summarySettings.detailLevel) {
     case 'short': detailPrompt = 'Crie um resumo muito breve (máximo 3 pontos principais)'; break;
     case 'medium': detailPrompt = 'Crie um resumo conciso com os pontos principais (5-7 pontos)'; break;
     case 'long': detailPrompt = 'Crie um resumo detalhado e abrangente'; break;
   }
-  return `${detailPrompt} do seguinte texto em ${settings.language === 'pt' ? 'português' : 'inglês'}.\n\nRegras de formatação (siga exatamente):\n1) Produza de 3 a 8 pontos principais como lista numerada (1., 2., 3., ...)\n2) Em cada item, comece com um tópico curto (3–8 palavras), seguido de dois pontos e, em seguida, uma explicação breve em uma única frase\n3) Quando for útil, adicione 1–3 subitens iniciados com "- " (hífen e espaço), cada um curto\n4) Não use markdown com **asteriscos**, títulos ou blocos de código\n5) Não envolva a resposta em blocos de código; retorne apenas texto simples estruturado\n\nTexto a resumir:\n${text.substring(0, 50000)}`;
+  return `${detailPrompt} do seguinte texto em ${summarySettings.language === 'pt' ? 'português' : 'inglês'}.
+
+Regras de formatação (siga exatamente):
+1) Produza de 3 a 8 pontos principais como lista numerada (1., 2., 3., ...)
+2) Em cada item, comece com um tópico curto (3–8 palavras), seguido de dois pontos e, em seguida, uma explicação breve em uma única frase
+3) Quando for útil, adicione 1–3 subitens iniciados com "- " (hífen e espaço), cada um curto
+4) Não use markdown com **asteriscos**, títulos ou blocos de código
+5) Não envolva a resposta em blocos de código; retorne apenas texto simples estruturado
+
+Texto a resumir:
+${text.substring(0, 50000)}`;
 }
 
-// Histórico
+async function generateSummaryWithOR(text) {
+  const messages = [
+    { role: 'system', content: 'Você é um assistente de resumo que retorna lista numerada com tópicos curtos e subitens quando necessário.' },
+    { role: 'user', content: buildSummaryInstructions(text) }
+  ];
+  return await orWithFallback(messages);
+}
+
+async function generatePdfTitleAndSummaryWithOR(text) {
+  const prompt = `Você receberá o conteúdo textual de um arquivo PDF. Gere:
+- TITLE: um título curto (no máximo 10 palavras), sem aspas/markdown
+- SUMMARY: um resumo estruturado conforme regras abaixo
+
+Regras do SUMMARY (siga exatamente):
+1) 3 a 8 itens numerados (1., 2., ...)
+2) Cada item: um tópico curto (3–8 palavras) seguido de dois pontos e uma frase breve
+3) Subitens opcionais iniciados com "- " (1–3)
+
+Responda estritamente neste formato:
+TITLE: <título curto>
+SUMMARY:
+1. <tópico curto>: <frase>
+- <subitem opcional>
+2. ...
+
+Conteúdo (parcial):
+${text.substring(0, 50000)}`;
+  const messages = [ { role: 'user', content: prompt } ];
+  const out = await orWithFallback(messages);
+  // Parse
+  let title = null, summary = null;
+  const lines = out.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].trim();
+    if (l.toUpperCase().startsWith('TITLE:')) {
+      title = l.substring(6).trim();
+      // SUMMARY starts after we encounter 'SUMMARY:'
+    }
+    if (l.toUpperCase().startsWith('SUMMARY:')) {
+      summary = lines.slice(i + 1).join('\n').trim();
+      break;
+    }
+  }
+  return { title, summary: summary || out };
+}
+
+// ================= Cache & Cooldown =================
+function contentHash(str) {
+  // djb2 simple hash
+  let h = 5381; for (let i = 0; i < str.length; i++) { h = ((h << 5) + h) + str.charCodeAt(i); h |= 0; }
+  return `h${h}`;
+}
+
+async function getFromCache(key) {
+  const res = await chrome.storage.local.get('summaryCache');
+  const cache = res.summaryCache || {};
+  return cache[key] || null;
+}
+
+async function saveToCache(key, value) {
+  const res = await chrome.storage.local.get('summaryCache');
+  const cache = res.summaryCache || {};
+  cache[key] = value;
+  // manter no máximo 100 entradas
+  const keys = Object.keys(cache);
+  if (keys.length > 100) {
+    // remove mais antigo
+    let oldestKey = null, oldestTs = Infinity;
+    for (const k of keys) { const ts = cache[k]?.timestamp || 0; if (ts < oldestTs) { oldestTs = ts; oldestKey = k; } }
+    if (oldestKey) delete cache[oldestKey];
+  }
+  await chrome.storage.local.set({ summaryCache: cache });
+}
+
+async function getCooldown() {
+  const res = await chrome.storage.local.get('openrouterCooldownUntil');
+  return res.openrouterCooldownUntil || 0;
+}
+
+async function setCooldown(ms) {
+  const until = Date.now() + (ms || 20000);
+  await chrome.storage.local.set({ openrouterCooldownUntil: until });
+}
+
+// ================= Histórico =================
 async function saveToHistory(originalText, summary, tab, options = {}) {
   try {
     const historyItem = {
@@ -187,26 +268,8 @@ async function saveToHistory(originalText, summary, tab, options = {}) {
     history.unshift(historyItem);
     const limitedHistory = history.slice(0, 50);
     await chrome.storage.local.set({ summaryHistory: limitedHistory });
-  } catch (error) {
-    console.error('Erro ao salvar no histórico:', error);
-  }
+  } catch (error) { console.error('Erro ao salvar no histórico:', error); }
 }
 
-async function getHistory() {
-  try {
-    const result = await chrome.storage.local.get('summaryHistory');
-    return result.summaryHistory || [];
-  } catch (error) {
-    console.error('Erro ao obter histórico:', error);
-    return [];
-  }
-}
-
-async function clearHistory() {
-  try {
-    await chrome.storage.local.remove('summaryHistory');
-  } catch (error) {
-    console.error('Erro ao limpar histórico:', error);
-    throw error;
-  }
-}
+async function getHistory() { try { const r = await chrome.storage.local.get('summaryHistory'); return r.summaryHistory || []; } catch (e) { return []; } }
+async function clearHistory() { try { await chrome.storage.local.remove('summaryHistory'); } catch (e) { throw e; } }

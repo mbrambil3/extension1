@@ -1,48 +1,36 @@
 // JavaScript para o popup da extensão
 document.addEventListener('DOMContentLoaded', function() {
-    // Atualizar versão dinamicamente a partir do manifest
     try {
         const { version } = chrome.runtime.getManifest();
         const verEl = document.querySelector('.version');
         if (verEl && version) verEl.textContent = 'v' + version;
-    } catch (e) { /* noop */ }
+    } catch (e) {}
 
     loadSettings();
     setupEventListeners();
 });
 
-// Carregar configurações salvas
 function loadSettings() {
     chrome.runtime.sendMessage({ action: "getSettings" }, (response) => {
         if (response) {
             document.getElementById('autoSummary').checked = response.settings.autoSummary;
             document.getElementById('language').value = response.settings.language;
             document.getElementById('detailLevel').value = response.settings.detailLevel;
+            document.getElementById('openrouterKey').value = response.settings.openrouterKey || '';
             updateStatusIndicator(response.isActive);
         }
     });
 }
 
-// Configurar event listeners
 function setupEventListeners() {
-    document.getElementById('autoSummary').addEventListener('change', function() {
-        saveSettings();
-    });
-    document.getElementById('language').addEventListener('change', function() {
-        saveSettings();
-    });
-    document.getElementById('detailLevel').addEventListener('change', function() {
-        saveSettings();
-    });
+    document.getElementById('autoSummary').addEventListener('change', saveSettings);
+    document.getElementById('language').addEventListener('change', saveSettings);
+    document.getElementById('detailLevel').addEventListener('change', saveSettings);
+    document.getElementById('openrouterKey').addEventListener('change', saveSettings);
 
-    document.getElementById('generateNow').addEventListener('click', function() {
-        generateSummaryNow();
-    });
-    document.getElementById('viewHistory').addEventListener('click', function() {
-        openHistoryWindow();
-    });
+    document.getElementById('generateNow').addEventListener('click', generateSummaryNow);
+    document.getElementById('viewHistory').addEventListener('click', openHistoryWindow);
 
-    // Importar PDF
     document.getElementById('pdfInput').addEventListener('change', async function(e) {
         const file = e.target.files && e.target.files[0];
         if (!file) return;
@@ -60,9 +48,7 @@ function setupEventListeners() {
                     showToast('PDF.js não carregou. Recarregue a extensão.', 'error');
                     return;
                 }
-                try {
-                    pdfjs.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('pdfjs/pdf.worker.min.js');
-                } catch (e) { /* opcional */ }
+                try { pdfjs.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('pdfjs/pdf.worker.min.js'); } catch (e) {}
                 const doc = await pdfjs.getDocument({ data: uint8, disableWorker: true }).promise;
                 let fullText = '';
                 const pages = Math.min(doc.numPages, 10);
@@ -77,7 +63,7 @@ function setupEventListeners() {
                     return;
                 }
                 const payload = `Arquivo: ${file.name}\n\n${fullText.substring(0, 50000)}`;
-                // Feedback imediato no popup
+                // Feedback imediato
                 showToast('Importando PDF... O resumo aparecerá no Histórico em instantes.', 'success');
                 chrome.runtime.sendMessage({ action: 'generateSummary', text: payload, source: 'pdf', fileName: file.name }, (response) => {
                     if (chrome.runtime.lastError) {
@@ -85,8 +71,7 @@ function setupEventListeners() {
                         return;
                     }
                     if (response && response.success) {
-                        showToast('PDF enviado para resumo. Abra o Histórico para acompanhar.', 'success');
-                        // Não fechar automaticamente; orientar o usuário
+                        showToast('PDF enviado. Abra o Histórico para acompanhar.', 'success');
                     } else {
                         showToast(response?.error || 'Falha ao iniciar resumo do PDF', 'error');
                     }
@@ -100,19 +85,14 @@ function setupEventListeners() {
     });
 }
 
-// Salvar configurações
 function saveSettings() {
     const settings = {
         autoSummary: document.getElementById('autoSummary').checked,
         language: document.getElementById('language').value,
-        detailLevel: document.getElementById('detailLevel').value
+        detailLevel: document.getElementById('detailLevel').value,
+        openrouterKey: document.getElementById('openrouterKey').value
     };
-    
-    chrome.runtime.sendMessage({
-        action: "updateSettings",
-        isActive: document.getElementById('autoSummary').checked,
-        settings: settings
-    }, (response) => {
+    chrome.runtime.sendMessage({ action: "updateSettings", isActive: settings.autoSummary, settings }, (response) => {
         if (response && response.success) {
             showToast('Configurações salvas!', 'success');
         } else {
@@ -121,108 +101,44 @@ function saveSettings() {
     });
 }
 
-// Helper: URLs restritas
 function isRestrictedUrl(url) {
     return url.startsWith('chrome://') || url.startsWith('chrome-extension://') || url.startsWith('edge://') || url.startsWith('about:') || url.startsWith('view-source:');
 }
 
 async function injectContentScript(tabId) {
-    try {
-        await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
-        return true;
-    } catch (e) {
-        console.warn('Falha ao injetar content.js:', e);
-        return false;
-    }
+    try { await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] }); return true; } catch (e) { return false; }
 }
 
-// Gerar resumo manualmente com fallback de injeção
 function generateSummaryNow() {
     const button = document.getElementById('generateNow');
     button.classList.add('loading');
     button.textContent = 'Gerando...';
-    
     chrome.tabs.query({ active: true, currentWindow: true }, async function(tabs) {
         const tab = tabs[0];
-        if (!tab) {
-            button.classList.remove('loading');
-            button.textContent = '🎯 Gerar Resumo Agora';
-            showToast('Nenhuma aba ativa encontrada', 'error');
-            return;
-        }
-        if (isRestrictedUrl(tab.url || '')) {
-            button.classList.remove('loading');
-            button.textContent = '🎯 Gerar Resumo Agora';
-            showToast('Esta página não permite injeção de conteúdo (chrome://, etc.)', 'warning');
-            return;
-        }
-
+        if (!tab) { button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; showToast('Nenhuma aba ativa encontrada', 'error'); return; }
+        if (isRestrictedUrl(tab.url || '')) { button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; showToast('Esta página não permite injeção de conteúdo (chrome://, etc.)', 'warning'); return; }
         function sendGenerate() {
             chrome.tabs.sendMessage(tab.id, { action: 'generateSummary', manual: true }, function(response) {
                 button.classList.remove('loading');
                 button.textContent = '🎯 Gerar Resumo Agora';
-                if (chrome.runtime.lastError) {
-                    const msg = chrome.runtime.lastError.message || '';
-                    if (msg.includes('Receiving end does not exist')) {
-                        showToast('Tentando preparar a página, clique novamente...', 'warning');
-                    } else {
-                        showToast('Erro: ' + msg, 'error');
-                    }
-                    return;
-                }
-                if (response && response.received) {
-                    if (response.started) {
-                        showToast('Resumo sendo gerado...', 'success');
-                    } else {
-                        showToast(response.errorMessage || 'Conteúdo não suportado para extração direta', 'warning');
-                    }
-                } else {
-                    showToast('A página pode não ter conteúdo suficiente', 'warning');
-                }
+                if (chrome.runtime.lastError) { const msg = chrome.runtime.lastError.message || ''; if (msg.includes('Receiving end does not exist')) { showToast('Tentando preparar a página, clique novamente...', 'warning'); } else { showToast('Erro: ' + msg, 'error'); } return; }
+                if (response && response.received) { if (response.started) { showToast('Resumo sendo gerado...', 'success'); } else { showToast(response.errorMessage || 'Conteúdo não suportado para extração direta', 'warning'); } } else { showToast('A página pode não ter conteúdo suficiente', 'warning'); }
             });
         }
-
         chrome.tabs.sendMessage(tab.id, { ping: true }, async function(response) {
-            if (chrome.runtime.lastError || !response || !response.pong) {
-                const injected = await injectContentScript(tab.id);
-                if (injected) {
-                    setTimeout(() => {
-                        chrome.tabs.sendMessage(tab.id, { ping: true }, function(resp2) {
-                            if (!chrome.runtime.lastError && resp2 && resp2.pong) {
-                                sendGenerate();
-                            } else {
-                                showToast('Não foi possível preparar a página para resumo', 'error');
-                            }
-                        });
-                    }, 300);
-                } else {
-                    showToast('Não foi possível preparar a página para resumo', 'error');
-                }
-                button.classList.remove('loading');
-                button.textContent = '🎯 Gerar Resumo Agora';
-                return;
-            }
+            if (chrome.runtime.lastError || !response || !response.pong) { const injected = await injectContentScript(tab.id); if (injected) { setTimeout(() => { chrome.tabs.sendMessage(tab.id, { ping: true }, function(resp2) { if (!chrome.runtime.lastError && resp2 && resp2.pong) { sendGenerate(); } else { showToast('Não foi possível preparar a página para resumo', 'error'); } }); }, 300); } else { showToast('Não foi possível preparar a página para resumo', 'error'); } button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; return; }
             sendGenerate();
         });
     });
 }
 
-function openHistoryWindow() {
-    chrome.tabs.create({ url: chrome.runtime.getURL('history.html') });
-}
+function openHistoryWindow() { chrome.tabs.create({ url: chrome.runtime.getURL('history.html') }); }
 
 function updateStatusIndicator(isActive) {
     const statusDot = document.querySelector('.status-dot');
     const statusText = document.querySelector('.status-text');
-    if (isActive) {
-        statusDot.classList.remove('inactive');
-        statusDot.classList.add('active');
-        statusText.textContent = 'Extensão Ativa';
-    } else {
-        statusDot.classList.remove('active');
-        statusDot.classList.add('inactive');
-        statusText.textContent = 'Extensão Inativa';
-    }
+    if (isActive) { statusDot.classList.remove('inactive'); statusDot.classList.add('active'); statusText.textContent = 'Extensão Ativa'; }
+    else { statusDot.classList.remove('active'); statusDot.classList.add('inactive'); statusText.textContent = 'Extensão Inativa'; }
 }
 
 function showToast(message, type = 'success') {
@@ -232,14 +148,7 @@ function showToast(message, type = 'success') {
     toast.textContent = message;
     container.appendChild(toast);
     setTimeout(() => { toast.classList.add('show'); }, 100);
-    setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => { if (container.contains(toast)) container.removeChild(toast); }, 300);
-    }, 3000);
+    setTimeout(() => { toast.classList.remove('show'); setTimeout(() => { if (container.contains(toast)) container.removeChild(toast); }, 300); }, 3000);
 }
 
-document.addEventListener('visibilitychange', function() {
-    if (!document.hidden) {
-        loadSettings();
-    }
-});
+document.addEventListener('visibilitychange', function() { if (!document.hidden) { loadSettings(); } });
