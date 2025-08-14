@@ -85,7 +85,15 @@
     <div id="toast-container" class="toast-container"></div>
 
     <!-- PDF.js local para extração no popup -->
-    <script src="pdfjs/pdf.min.js"></script>
+    <script>
+      (function(){
+        const s = document.createElement('script');
+        s.src = chrome.runtime.getURL('pdfjs/pdf.min.js');
+        s.onload = function(){ console.log('PDF.js loaded'); };
+        s.onerror = function(){ console.error('Falha ao carregar PDF.js'); };
+        document.currentScript.parentNode.insertBefore(s, document.currentScript);
+      })();
+    </script>
     
     <script src="popup.js"></script>
 </body>
