@@ -42,6 +42,39 @@ chrome.commands.onCommand.addListener((command) => {
   }
 });
 
+// Utilitário: carregar PDF.js quando necessário (no contexto do SW não há DOM; usamos importScripts)
+function ensurePdfJsLoaded() {
+  if (self.pdfjsLib) return Promise.resolve(self.pdfjsLib);
+  return new Promise((resolve, reject) => {
+    try {
+      importScripts('pdfjs/pdf.min.js');
+      // Configura o worker
+      if (self.pdfjsLib) {
+        self.pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('pdfjs/pdf.worker.min.js');
+        resolve(self.pdfjsLib);
+      } else {
+        reject(new Error('pdfjsLib não disponível'));
+      }
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+async function extractTextFromPdfArrayBuffer(arrayBuffer, maxPages = 10) {
+  await ensurePdfJsLoaded();
+  const pdf = await self.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let fullText = '';
+  const pages = Math.min(pdf.numPages, maxPages);
+  for (let i = 1; i <= pages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const strings = content.items.map(it => it.str).join(' ');
+    fullText += strings + '\n';
+  }
+  return fullText.trim();
+}
+
 // Gerenciar mensagens entre scripts
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "getSettings") {
@@ -85,30 +118,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === 'summarizePdfBinary') {
-    // Recebe um ArrayBuffer do popup e tenta extrair texto com PDF.js (próxima versão)
-    // Aqui, como fallback imediato, iremos criar um registro no histórico com indicação de PDF importado
-    // e tentar resumir a partir de metadata simples (não ideal). Próxima etapa: embutir PDF.js.
-    try {
-      const arrayBuffer = message.data;
-      const name = message.name || 'Documento PDF';
-      if (!arrayBuffer) throw new Error('Arquivo não recebido');
+    // Recebe um ArrayBuffer do popup e extrai o texto via PDF.js no SW
+    (async () => {
+      try {
+        const arrayBuffer = message.data;
+        const name = message.name || 'Documento PDF';
+        if (!arrayBuffer) throw new Error('Arquivo não recebido');
 
-      // Por ora, enviaremos um aviso de que a extração completa virá na próxima atualização
-      const placeholderText = `Arquivo importado: ${name}. A extração completa de texto de PDF será habilitada na próxima atualização.`;
-
-      generateSummaryWithGemini(placeholderText, summarySettings)
-        .then(summary => {
-          // Salvar no histórico com dados mínimos
-          const tabInfo = sender?.tab || { title: name, url: 'arquivo-importado' };
-          saveToHistory(placeholderText, summary, tabInfo);
-          sendResponse({ success: true, summary });
-        })
-        .catch(err => sendResponse({ success: false, error: err.message }));
-      return true;
-    } catch (e) {
-      sendResponse({ success: false, error: e.message });
-      return true;
-    }
+        const text = await extractTextFromPdfArrayBuffer(arrayBuffer, 10);
+        if (!text || text.length < 50) {
+          throw new Error('Não foi possível extrair texto legível do PDF.');
+        }
+        const promptText = `Arquivo: ${name}\n\n${text.substring(0, 50000)}`;
+        const summary = await generateSummaryWithGemini(promptText, summarySettings);
+        const tabInfo = sender?.tab || { title: name, url: 'arquivo-importado' };
+        await saveToHistory(text, summary, tabInfo);
+        sendResponse({ success: true, summary });
+      } catch (e) {
+        console.error('Erro ao resumir PDF importado:', e);
+        sendResponse({ success: false, error: e.message });
+      }
+    })();
+    return true;
   }
   
   if (message.action === "getHistory") {
