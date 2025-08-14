@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto-Summarizer</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="popup-container">
+        <div class="popup-header">
+            <h2>📄 Auto-Summarizer</h2>
+            <p class="version">v1.0.0</p>
+        </div>
+        
+        <div class="popup-content">
+            <div class="setting-group">
+                <div class="setting-item">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="autoSummary" class="toggle-input">
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-text">Resumo Automático</span>
+                    </label>
+                    <small class="setting-description">Gerar resumos automaticamente ao detectar artigos longos</small>
+                </div>
+                
+                <div class="setting-item">
+                    <label for="language" class="setting-label">Idioma do Resumo</label>
+                    <select id="language" class="setting-select">
+                        <option value="pt">Português</option>
+                        <option value="en">Inglês</option>
+                    </select>
+                </div>
+                
+                <div class="setting-item">
+                    <label for="detailLevel" class="setting-label">Nível de Detalhe</label>
+                    <select id="detailLevel" class="setting-select">
+                        <option value="short">Breve</option>
+                        <option value="medium">Médio</option>
+                        <option value="long">Detalhado</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="action-group">
+                <button id="generateNow" class="primary-btn">
+                    🎯 Gerar Resumo Agora
+                </button>
+                
+                <button id="testConnection" class="secondary-btn">
+                    🔗 Testar Conexão API
+                </button>
+            </div>
+            
+            <div class="info-group">
+                <div class="shortcut-info">
+                    <span class="shortcut-label">Atalho:</span>
+                    <code class="shortcut-key">Ctrl+Shift+S</code>
+                </div>
+                
+                <div class="status-indicator">
+                    <span class="status-dot active"></span>
+                    <span class="status-text">Extensão Ativa</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="popup-footer">
+            <small>Powered by Gemini AI</small>
+        </div>
+    </div>
+    
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+    
+    <script src="popup.js"></script>
+</body>
+</html>

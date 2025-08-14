@@ -1,0 +1,125 @@
+// Background script para coordenar a extensão
+let isExtensionActive = true;
+let summarySettings = {
+  autoSummary: true,
+  language: 'pt',
+  detailLevel: 'medium'
+};
+
+// Carregar configurações ao iniciar
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.storage.sync.get(['extensionActive', 'summarySettings'], (result) => {
+    if (result.extensionActive !== undefined) {
+      isExtensionActive = result.extensionActive;
+    }
+    if (result.summarySettings) {
+      summarySettings = { ...summarySettings, ...result.summarySettings };
+    }
+  });
+});
+
+// Escutar atalho de teclado
+chrome.commands.onCommand.addListener((command) => {
+  if (command === "generate_summary") {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]) {
+        chrome.tabs.sendMessage(tabs[0].id, { 
+          action: "generateSummary", 
+          manual: true 
+        });
+      }
+    });
+  }
+});
+
+// Gerenciar mensagens entre scripts
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === "getSettings") {
+    sendResponse({ 
+      isActive: isExtensionActive,
+      settings: summarySettings 
+    });
+  }
+  
+  if (message.action === "updateSettings") {
+    isExtensionActive = message.isActive;
+    summarySettings = { ...summarySettings, ...message.settings };
+    
+    chrome.storage.sync.set({
+      extensionActive: isExtensionActive,
+      summarySettings: summarySettings
+    });
+    
+    sendResponse({ success: true });
+  }
+  
+  if (message.action === "generateSummary") {
+    generateSummaryWithGemini(message.text, summarySettings)
+      .then(summary => sendResponse({ success: true, summary }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true; // Mantém o canal de resposta aberto para async
+  }
+});
+
+// Função para gerar resumo usando Gemini API
+async function generateSummaryWithGemini(text, settings) {
+  const API_KEY = 'AIzaSyCGqaKkd1NKGfo9aygrx92ecIjy8nqlk0c';
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${API_KEY}`;
+  
+  // Configurar prompt baseado nas configurações
+  let detailPrompt = '';
+  switch (settings.detailLevel) {
+    case 'short':
+      detailPrompt = 'Crie um resumo muito breve (máximo 3 pontos principais)';
+      break;
+    case 'medium':
+      detailPrompt = 'Crie um resumo conciso com os pontos principais (5-7 pontos)';
+      break;
+    case 'long':
+      detailPrompt = 'Crie um resumo detalhado e abrangente';
+      break;
+  }
+  
+  const prompt = `${detailPrompt} do seguinte texto em ${settings.language === 'pt' ? 'português' : 'inglês'}. 
+Organize os pontos principais de forma clara e estruturada:
+
+${text.substring(0, 30000)}`; // Limitar texto para evitar exceder limites da API
+  
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: prompt
+          }]
+        }],
+        generationConfig: {
+          temperature: 0.7,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 1024,
+        }
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Erro na API: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+      return data.candidates[0].content.parts[0].text;
+    } else {
+      throw new Error('Resposta inválida da API');
+    }
+    
+  } catch (error) {
+    console.error('Erro ao gerar resumo:', error);
+    throw error;
+  }
+}

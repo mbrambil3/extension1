@@ -1,0 +1,51 @@
+{
+  "manifest_version": 3,
+  "name": "Auto-Summarizer",
+  "version": "1.0.0",
+  "description": "Gera automaticamente resumos de artigos e PDFs usando IA",
+  
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*",
+    "file://*/*"
+  ],
+  
+  "background": {
+    "service_worker": "background.js"
+  },
+  
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["sidepanel.css"]
+    }
+  ],
+  
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Auto-Summarizer"
+  },
+  
+  "commands": {
+    "generate_summary": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S"
+      },
+      "description": "Gerar resumo manualmente"
+    }
+  },
+  
+  "web_accessible_resources": [
+    {
+      "resources": ["sidepanel.html", "sidepanel.css", "gemini-api.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
