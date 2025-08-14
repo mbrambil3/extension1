@@ -11,13 +11,20 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function loadSettings() {
-    chrome.runtime.sendMessage({ action: "getSettings" }, (response) => {
+    chrome.runtime.sendMessage({ action: "getSettings" }, async (response) => {
         if (response) {
             document.getElementById('autoSummary').checked = response.settings.autoSummary;
             document.getElementById('language').value = response.settings.language;
             document.getElementById('detailLevel').value = response.settings.detailLevel;
             document.getElementById('openrouterKey').value = response.settings.openrouterKey || '';
             updateStatusIndicator(response.isActive);
+            // Exibir último modelo utilizado
+            try {
+                const res = await chrome.storage.local.get('lastModelUsed');
+                const model = res.lastModelUsed || '—';
+                const md = document.getElementById('modelDisplay');
+                if (md) md.textContent = model;
+            } catch (e) {}
         }
     });
 }
@@ -34,52 +41,29 @@ function setupEventListeners() {
     document.getElementById('pdfInput').addEventListener('change', async function(e) {
         const file = e.target.files && e.target.files[0];
         if (!file) return;
-        if (file.type !== 'application/pdf') {
-            showToast('Selecione um arquivo PDF', 'error');
-            return;
-        }
+        if (file.type !== 'application/pdf') { showToast('Selecione um arquivo PDF', 'error'); return; }
         const reader = new FileReader();
         reader.onload = async function() {
             try {
                 const arrayBuffer = reader.result;
                 const uint8 = new Uint8Array(arrayBuffer);
                 const pdfjs = window.pdfjsLib;
-                if (!pdfjs) {
-                    showToast('PDF.js não carregou. Recarregue a extensão.', 'error');
-                    return;
-                }
+                if (!pdfjs) { showToast('PDF.js não carregou. Recarregue a extensão.', 'error'); return; }
                 try { pdfjs.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('pdfjs/pdf.worker.min.js'); } catch (e) {}
                 const doc = await pdfjs.getDocument({ data: uint8, disableWorker: true }).promise;
                 let fullText = '';
                 const pages = Math.min(doc.numPages, 10);
-                for (let i = 1; i <= pages; i++) {
-                    const page = await doc.getPage(i);
-                    const content = await page.getTextContent();
-                    fullText += content.items.map(it => it.str).join(' ') + '\n';
-                }
+                for (let i = 1; i <= pages; i++) { const page = await doc.getPage(i); const content = await page.getTextContent(); fullText += content.items.map(it => it.str).join(' ') + '\n'; }
                 fullText = (fullText || '').trim();
-                if (!fullText || fullText.length < 50) {
-                    showToast('Não foi possível extrair texto do PDF', 'error');
-                    return;
-                }
+                if (!fullText || fullText.length < 50) { showToast('Não foi possível extrair texto do PDF', 'error'); return; }
                 const payload = `Arquivo: ${file.name}\n\n${fullText.substring(0, 50000)}`;
-                // Feedback imediato
                 showToast('Importando PDF... O resumo aparecerá no Histórico em instantes.', 'success');
                 chrome.runtime.sendMessage({ action: 'generateSummary', text: payload, source: 'pdf', fileName: file.name }, (response) => {
-                    if (chrome.runtime.lastError) {
-                        showToast('Erro: ' + chrome.runtime.lastError.message, 'error');
-                        return;
-                    }
-                    if (response && response.success) {
-                        showToast('PDF enviado. Abra o Histórico para acompanhar.', 'success');
-                    } else {
-                        showToast(response?.error || 'Falha ao iniciar resumo do PDF', 'error');
-                    }
+                    if (chrome.runtime.lastError) { showToast('Erro: ' + chrome.runtime.lastError.message, 'error'); return; }
+                    if (response && response.success) { showToast('PDF enviado. Abra o Histórico para acompanhar.', 'success'); }
+                    else { showToast(response?.error || 'Falha ao iniciar resumo do PDF', 'error'); }
                 });
-            } catch (err) {
-                console.error('Falha ao processar PDF:', err);
-                showToast('Falha ao processar PDF: ' + (err?.message || err), 'error');
-            }
+            } catch (err) { console.error('Falha ao processar PDF:', err); showToast('Falha ao processar PDF: ' + (err?.message || err), 'error'); }
         };
         reader.readAsArrayBuffer(file);
     });
@@ -93,21 +77,13 @@ function saveSettings() {
         openrouterKey: document.getElementById('openrouterKey').value
     };
     chrome.runtime.sendMessage({ action: "updateSettings", isActive: settings.autoSummary, settings }, (response) => {
-        if (response && response.success) {
-            showToast('Configurações salvas!', 'success');
-        } else {
-            showToast('Erro ao salvar configurações', 'error');
-        }
+        if (response && response.success) { showToast('Configurações salvas!', 'success'); }
+        else { showToast('Erro ao salvar configurações', 'error'); }
     });
 }
 
-function isRestrictedUrl(url) {
-    return url.startsWith('chrome://') || url.startsWith('chrome-extension://') || url.startsWith('edge://') || url.startsWith('about:') || url.startsWith('view-source:');
-}
-
-async function injectContentScript(tabId) {
-    try { await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] }); return true; } catch (e) { return false; }
-}
+function isRestrictedUrl(url) { return url.startsWith('chrome://') || url.startsWith('chrome-extension://') || url.startsWith('edge://') || url.startsWith('about:') || url.startsWith('view-source:'); }
+async function injectContentScript(tabId) { try { await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] }); return true; } catch (e) { return false; } }
 
 function generateSummaryNow() {
     const button = document.getElementById('generateNow');
@@ -137,8 +113,8 @@ function openHistoryWindow() { chrome.tabs.create({ url: chrome.runtime.getURL('
 function updateStatusIndicator(isActive) {
     const statusDot = document.querySelector('.status-dot');
     const statusText = document.querySelector('.status-text');
-    if (isActive) { statusDot.classList.remove('inactive'); statusDot.classList.add('active'); statusText.textContent = 'Extensão Ativa'; }
-    else { statusDot.classList.remove('active'); statusDot.classList.add('inactive'); statusText.textContent = 'Extensão Inativa'; }
+    if (isActive) { statusDot.classList.remove('inactive'); statusDot.classList.add('active'); statusText.firstChild && (statusText.firstChild.textContent = 'Extensão Ativa'); }
+    else { statusDot.classList.remove('active'); statusDot.classList.add('inactive'); statusText.firstChild && (statusText.firstChild.textContent = 'Extensão Inativa'); }
 }
 
 function showToast(message, type = 'success') {
@@ -151,4 +127,8 @@ function showToast(message, type = 'success') {
     setTimeout(() => { toast.classList.remove('show'); setTimeout(() => { if (container.contains(toast)) container.removeChild(toast); }, 300); }, 3000);
 }
 
-document.addEventListener('visibilitychange', function() { if (!document.hidden) { loadSettings(); } });
+document.addEventListener('visibilitychange', async function() {
+    if (!document.hidden) {
+        loadSettings();
+    }
+});

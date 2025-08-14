@@ -1,4 +1,4 @@
-// Background script (OpenRouter only) com cache, cooldown e fallback
+// Background script (OpenRouter only) com cache, cooldown e múltiplos fallbacks
 let isExtensionActive = true;
 let summarySettings = {
   autoSummary: true,
@@ -10,7 +10,16 @@ let summarySettings = {
 const DEFAULT_OR_API_KEY = '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';
 const OR_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const PRIMARY_MODEL = 'deepseek/deepseek-r1-0528:free';
-const FALLBACK_MODEL = 'meta-llama/llama-3.3-70b-instruct:free';
+const FALLBACK_MODELS = [
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'deepseek/deepseek-chat-v3-0324:free',
+  'qwen/qwen3-coder:free',
+  'deepseek/deepseek-r1:free',
+  'tngtech/deepseek-r1t2-chimera:free',
+  'google/gemini-2.0-flash-exp:free',
+  'openai/gpt-oss-20b:free',
+  'deepseek/deepseek-r1-distill-llama-70b:free'
+];
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
 function getApiKey() {
@@ -56,51 +65,39 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     (async () => {
       try {
-        // Cooldown global
         const cooldown = await getCooldown();
-        if (cooldown > Date.now()) {
-          const secs = Math.ceil((cooldown - Date.now()) / 1000);
-          sendResponse({ success: false, error: `Serviço temporariamente indisponível. Aguarde ${secs}s.` });
-          return;
-        }
-        // Cache
+        if (cooldown > Date.now()) { const secs = Math.ceil((cooldown - Date.now()) / 1000); sendResponse({ success: false, error: `Serviço temporariamente indisponível. Aguarde ${secs}s.` }); return; }
         const key = contentHash(message.text);
         const cached = await getFromCache(key);
         if (cached && (Date.now() - cached.timestamp) < CACHE_TTL_MS) {
-          if (fromPdf) {
-            await saveToHistory(message.text, cached.summary, sender.tab, { inferredTitle: cached.title || fileName, source: 'pdf' });
-            sendResponse({ success: true, summary: cached.summary, title: cached.title || fileName });
-          } else {
-            await saveToHistory(message.text, cached.summary, sender.tab);
-            sendResponse({ success: true, summary: cached.summary, title: sender?.tab?.title || 'Página' });
-          }
+          await chrome.storage.local.set({ lastModelUsed: cached.model || 'cache' });
+          if (fromPdf) { await saveToHistory(message.text, cached.summary, sender.tab, { inferredTitle: cached.title || fileName, source: 'pdf' }); sendResponse({ success: true, summary: cached.summary, title: cached.title || fileName, modelUsed: cached.model || 'cache' }); }
+          else { await saveToHistory(message.text, cached.summary, sender.tab); sendResponse({ success: true, summary: cached.summary, title: sender?.tab?.title || 'Página', modelUsed: cached.model || 'cache' }); }
           return;
         }
 
+        let modelUsed = null;
         let title = null;
         let summary = null;
         if (fromPdf) {
-          // Uma única chamada retornando TÍTULO + RESUMO
-          const combined = await generatePdfTitleAndSummaryWithOR(message.text);
+          const combined = await generatePdfTitleAndSummaryOR(message.text);
           title = combined.title || fileName;
           summary = combined.summary;
+          modelUsed = combined.model;
         } else {
-          summary = await generateSummaryWithOR(message.text);
+          const r = await generateSummaryOR(message.text);
+          summary = r.text;
+          modelUsed = r.model;
         }
 
-        // Salvar cache
-        await saveToCache(key, { title: title || null, summary, timestamp: Date.now(), source: fromPdf ? 'pdf' : 'web' });
+        await saveToCache(key, { title: title || null, summary, model: modelUsed, timestamp: Date.now(), source: fromPdf ? 'pdf' : 'web' });
+        await chrome.storage.local.set({ lastModelUsed: modelUsed });
 
-        if (fromPdf) {
-          await saveToHistory(message.text, summary, sender.tab, { inferredTitle: title || fileName, source: 'pdf' });
-          sendResponse({ success: true, summary, title: title || fileName });
-        } else {
-          await saveToHistory(message.text, summary, sender.tab);
-          sendResponse({ success: true, summary, title: sender?.tab?.title || 'Página' });
-        }
+        if (fromPdf) { await saveToHistory(message.text, summary, sender.tab, { inferredTitle: title || fileName, source: 'pdf' }); sendResponse({ success: true, summary, title: title || fileName, modelUsed }); }
+        else { await saveToHistory(message.text, summary, sender.tab); sendResponse({ success: true, summary, title: sender?.tab?.title || 'Página', modelUsed }); }
       } catch (error) {
         const msg = (error && error.message) ? error.message : 'Falha ao acessar o serviço de IA';
-        if (/429/.test(msg)) await setCooldown(20000); // 20s
+        if (/429/.test(msg)) await setCooldown(20000);
         let display = msg;
         if (msg.includes('503') || /UNAVAILABLE/i.test(msg) || /Failed to fetch/i.test(msg)) display = 'Serviço temporariamente indisponível. Tente novamente em alguns segundos.';
         sendResponse({ success: false, error: display });
@@ -112,35 +109,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'clearHistory') { clearHistory().then(() => sendResponse({ success: true })); return true; }
 });
 
-// ================= OpenRouter helpers =================
 async function orRequest(messages, model) {
-  const headers = {
-    'Authorization': `Bearer ${getApiKey()}`,
-    'Content-Type': 'application/json',
-    'HTTP-Referer': chrome.runtime.getURL(''),
-    'X-Title': 'Auto-Summarizer DeepSeek'
-  };
+  const headers = { 'Authorization': `Bearer ${getApiKey()}`, 'Content-Type': 'application/json', 'HTTP-Referer': chrome.runtime.getURL(''), 'X-Title': 'Auto-Summarizer OR' };
   const body = JSON.stringify({ model, messages, temperature: 0.7, max_tokens: 1024 });
   const resp = await fetch(OR_URL, { method: 'POST', headers, body });
-  if (!resp.ok) {
-    const detail = await resp.text();
-    const err = new Error(`OpenRouter API error: ${resp.status} - ${detail}`);
-    err.status = resp.status; throw err;
-  }
+  if (!resp.ok) { const detail = await resp.text(); const err = new Error(`OpenRouter API error: ${resp.status} - ${detail}`); err.status = resp.status; throw err; }
   const data = await resp.json();
   const out = data?.choices?.[0]?.message?.content;
   if (!out) throw new Error('Resposta inválida da OpenRouter');
-  return out;
+  return { text: out, model };
 }
 
 async function orWithFallback(messages) {
-  try {
-    return await orRequest(messages, PRIMARY_MODEL);
-  } catch (e) {
-    if (e.status === 429 || e.status === 503) {
-      // cooldown rápido
-      await setCooldown(20000);
-      return await orRequest(messages, FALLBACK_MODEL);
+  try { return await orRequest(messages, PRIMARY_MODEL); }
+  catch (e) {
+    if (e.status !== 429 && e.status !== 503) throw e;
+    await setCooldown(20000);
+    for (const m of FALLBACK_MODELS) {
+      try { return await orRequest(messages, m); }
+      catch (err) { if (err.status === 429 || err.status === 503) { await setCooldown(20000); continue; } else { throw err; } }
     }
     throw e;
   }
@@ -166,110 +153,36 @@ Texto a resumir:
 ${text.substring(0, 50000)}`;
 }
 
-async function generateSummaryWithOR(text) {
-  const messages = [
-    { role: 'system', content: 'Você é um assistente de resumo que retorna lista numerada com tópicos curtos e subitens quando necessário.' },
-    { role: 'user', content: buildSummaryInstructions(text) }
-  ];
+async function generateSummaryOR(text) {
+  const messages = [ { role: 'system', content: 'Você é um assistente de resumo que retorna lista numerada com tópicos curtos e subitens quando necessário.' }, { role: 'user', content: buildSummaryInstructions(text) } ];
   return await orWithFallback(messages);
 }
 
-async function generatePdfTitleAndSummaryWithOR(text) {
-  const prompt = `Você receberá o conteúdo textual de um arquivo PDF. Gere:
-- TITLE: um título curto (no máximo 10 palavras), sem aspas/markdown
-- SUMMARY: um resumo estruturado conforme regras abaixo
-
-Regras do SUMMARY (siga exatamente):
-1) 3 a 8 itens numerados (1., 2., ...)
-2) Cada item: um tópico curto (3–8 palavras) seguido de dois pontos e uma frase breve
-3) Subitens opcionais iniciados com "- " (1–3)
-
-Responda estritamente neste formato:
-TITLE: <título curto>
-SUMMARY:
-1. <tópico curto>: <frase>
-- <subitem opcional>
-2. ...
-
-Conteúdo (parcial):
-${text.substring(0, 50000)}`;
+async function generatePdfTitleAndSummaryOR(text) {
+  const prompt = `Você receberá o conteúdo textual de um arquivo PDF. Gere:\n- TITLE: um título curto (no máximo 10 palavras), sem aspas/markdown\n- SUMMARY: um resumo estruturado conforme regras abaixo\n\nRegras do SUMMARY (siga exatamente):\n1) 3 a 8 itens numerados (1., 2., ...)\n2) Cada item: um tópico curto (3–8 palavras) seguido de dois pontos e uma frase breve\n3) Subitens opcionais iniciados com \"- \" (1–3)\n\nResponda estritamente neste formato:\nTITLE: <título curto>\nSUMMARY:\n1. <tópico curto>: <frase>\n- <subitem opcional>\n2. ...\n\nConteúdo (parcial):\n${text.substring(0, 50000)}`;
   const messages = [ { role: 'user', content: prompt } ];
-  const out = await orWithFallback(messages);
-  // Parse
+  const { text: out, model } = await orWithFallback(messages);
   let title = null, summary = null;
   const lines = out.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i].trim();
-    if (l.toUpperCase().startsWith('TITLE:')) {
-      title = l.substring(6).trim();
-      // SUMMARY starts after we encounter 'SUMMARY:'
-    }
-    if (l.toUpperCase().startsWith('SUMMARY:')) {
-      summary = lines.slice(i + 1).join('\n').trim();
-      break;
-    }
+    if (l.toUpperCase().startsWith('TITLE:')) title = l.substring(6).trim();
+    if (l.toUpperCase().startsWith('SUMMARY:')) { summary = lines.slice(i + 1).join('\n').trim(); break; }
   }
-  return { title, summary: summary || out };
+  return { title, summary: summary || out, model };
 }
 
-// ================= Cache & Cooldown =================
-function contentHash(str) {
-  // djb2 simple hash
-  let h = 5381; for (let i = 0; i < str.length; i++) { h = ((h << 5) + h) + str.charCodeAt(i); h |= 0; }
-  return `h${h}`;
-}
+function contentHash(str) { let h = 5381; for (let i = 0; i < str.length; i++) { h = ((h << 5) + h) + str.charCodeAt(i); h |= 0; } return `h${h}`; }
+async function getFromCache(key) { const res = await chrome.storage.local.get('summaryCache'); return (res.summaryCache || {})[key] || null; }
+async function saveToCache(key, value) { const res = await chrome.storage.local.get('summaryCache'); const cache = res.summaryCache || {}; cache[key] = value; const keys = Object.keys(cache); if (keys.length > 100) { let oldestKey = null, oldestTs = Infinity; for (const k of keys) { const ts = cache[k]?.timestamp || 0; if (ts < oldestTs) { oldestTs = ts; oldestKey = k; } } if (oldestKey) delete cache[oldestKey]; } await chrome.storage.local.set({ summaryCache: cache }); }
+async function getCooldown() { const r = await chrome.storage.local.get('openrouterCooldownUntil'); return r.openrouterCooldownUntil || 0; }
+async function setCooldown(ms) { const until = Date.now() + (ms || 20000); await chrome.storage.local.set({ openrouterCooldownUntil: until }); }
 
-async function getFromCache(key) {
-  const res = await chrome.storage.local.get('summaryCache');
-  const cache = res.summaryCache || {};
-  return cache[key] || null;
-}
-
-async function saveToCache(key, value) {
-  const res = await chrome.storage.local.get('summaryCache');
-  const cache = res.summaryCache || {};
-  cache[key] = value;
-  // manter no máximo 100 entradas
-  const keys = Object.keys(cache);
-  if (keys.length > 100) {
-    // remove mais antigo
-    let oldestKey = null, oldestTs = Infinity;
-    for (const k of keys) { const ts = cache[k]?.timestamp || 0; if (ts < oldestTs) { oldestTs = ts; oldestKey = k; } }
-    if (oldestKey) delete cache[oldestKey];
-  }
-  await chrome.storage.local.set({ summaryCache: cache });
-}
-
-async function getCooldown() {
-  const res = await chrome.storage.local.get('openrouterCooldownUntil');
-  return res.openrouterCooldownUntil || 0;
-}
-
-async function setCooldown(ms) {
-  const until = Date.now() + (ms || 20000);
-  await chrome.storage.local.set({ openrouterCooldownUntil: until });
-}
-
-// ================= Histórico =================
 async function saveToHistory(originalText, summary, tab, options = {}) {
   try {
-    const historyItem = {
-      id: Date.now() + Math.random(),
-      title: (options?.inferredTitle) || tab?.title || 'Página sem título',
-      url: (options?.source === 'pdf') ? (tab?.url || 'arquivo-importado') : (tab?.url || 'URL desconhecida'),
-      favicon: tab?.favIconUrl || null,
-      originalText: originalText.substring(0, 500) + (originalText.length > 500 ? '...' : ''),
-      summary: summary,
-      timestamp: new Date().toISOString(),
-      wordCount: originalText.split(' ').length
-    };
-    const result = await chrome.storage.local.get('summaryHistory');
-    const history = result.summaryHistory || [];
-    history.unshift(historyItem);
-    const limitedHistory = history.slice(0, 50);
-    await chrome.storage.local.set({ summaryHistory: limitedHistory });
+    const historyItem = { id: Date.now() + Math.random(), title: (options?.inferredTitle) || tab?.title || 'Página sem título', url: (options?.source === 'pdf') ? (tab?.url || 'arquivo-importado') : (tab?.url || 'URL desconhecida'), favicon: tab?.favIconUrl || null, originalText: originalText.substring(0, 500) + (originalText.length > 500 ? '...' : ''), summary: summary, timestamp: new Date().toISOString(), wordCount: originalText.split(' ').length };
+    const result = await chrome.storage.local.get('summaryHistory'); const history = result.summaryHistory || []; history.unshift(historyItem); const limitedHistory = history.slice(0, 50); await chrome.storage.local.set({ summaryHistory: limitedHistory });
   } catch (error) { console.error('Erro ao salvar no histórico:', error); }
 }
-
 async function getHistory() { try { const r = await chrome.storage.local.get('summaryHistory'); return r.summaryHistory || []; } catch (e) { return []; } }
 async function clearHistory() { try { await chrome.storage.local.remove('summaryHistory'); } catch (e) { throw e; } }

@@ -41,11 +41,14 @@
                     </select>
                 </div>
 
-                <div class="setting-item">
+                <details id="advancedOptions">
+                  <summary>Opções avançadas</summary>
+                  <div class="setting-item" style="margin-top:10px;">
                     <label for="openrouterKey" class="setting-label">OpenRouter API Key (opcional)</label>
                     <input id="openrouterKey" type="password" class="setting-select" placeholder="sk-or-v1-..." />
                     <small class="setting-description">Se preencher, usaremos sua própria cota. Em branco, usamos a chave padrão.</small>
-                </div>
+                  </div>
+                </details>
             </div>
             
             <div class="action-group">
@@ -77,22 +80,18 @@
                 
                 <div class="status-indicator">
                     <span class="status-dot api-status active"></span>
-                    <span class="status-text">Conexão API Ativa</span>
+                    <span class="status-text">Conexão API Ativa • <span id="modelDisplay">—</span></span>
                 </div>
             </div>
         </div>
         
         <div class="popup-footer">
-            <small>Powered by DeepSeek (OpenRouter)</small>
+            <small>Powered by OpenRouter (fallback automático)</small>
         </div>
     </div>
     
-    <!-- Toast Container -->
     <div id="toast-container" class="toast-container"></div>
-
-    <!-- PDF.js local para extração no popup -->
     <script src="pdfjs/pdf.min.js"></script>
-    
     <script src="popup.js"></script>
 </body>
 </html>
