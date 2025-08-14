@@ -82,18 +82,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const fileName = message.fileName || 'Documento PDF';
     generateSummaryWithGemini(message.text, summarySettings)
       .then(async summary => {
-        // Gerar um título com IA apenas para PDFs importados
-        let inferredTitle = null;
         if (fromPdf) {
+          // Gerar um título com IA apenas para PDFs importados
+          let inferredTitle = null;
           try {
             inferredTitle = await generateTitleWithGemini(message.text, summarySettings, fileName);
           } catch (e) {
             inferredTitle = null;
           }
+          await saveToHistory(message.text, summary, sender.tab, { inferredTitle: inferredTitle || fileName, source: 'pdf' });
+          sendResponse({ success: true, summary, title: inferredTitle || fileName });
+        } else {
+          // Conteúdo web: manter o título da aba intacto
+          await saveToHistory(message.text, summary, sender.tab);
+          sendResponse({ success: true, summary, title: sender?.tab?.title || 'Página' });
         }
-        // Salvar no histórico
-        await saveToHistory(message.text, summary, sender.tab, { inferredTitle: inferredTitle || fileName, source: fromPdf ? 'pdf' : 'web' });
-        sendResponse({ success: true, summary, title: inferredTitle || fileName });
       })
       .catch(error => {
         // Trate erros de rede (Failed to fetch) e 503 com mensagem amigável
