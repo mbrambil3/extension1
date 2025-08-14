@@ -92,6 +92,8 @@ async function extractPDFContent(forceGenerate = false) {
 
 // Extrair conteúdo de página web
 function extractWebPageContent(forceGenerate = false) {
+  console.log('Extraindo conteúdo da página web...');
+  
   // Seletores para áreas de conteúdo principais
   const contentSelectors = [
     'article',
@@ -100,7 +102,10 @@ function extractWebPageContent(forceGenerate = false) {
     '.post-content',
     '.entry-content',
     '.article-body',
+    '.article-content',
+    '.post-body',
     'main',
+    '.main-content',
     '.container'
   ];
   
@@ -108,17 +113,26 @@ function extractWebPageContent(forceGenerate = false) {
   
   // Tentar encontrar área de conteúdo principal
   for (const selector of contentSelectors) {
-    content = document.querySelector(selector);
-    if (content) break;
+    const element = document.querySelector(selector);
+    if (element && element.innerText && element.innerText.length > 500) {
+      content = element;
+      console.log('Conteúdo encontrado com seletor:', selector);
+      break;
+    }
   }
   
   // Se não encontrar, usar o body
   if (!content) {
     content = document.body;
+    console.log('Usando body como fallback');
   }
   
   // Remover elementos desnecessários
-  const elementsToRemove = ['script', 'style', 'nav', 'header', 'footer', '.ad', '.advertisement'];
+  const elementsToRemove = [
+    'script', 'style', 'nav', 'header', 'footer', 
+    '.ad', '.advertisement', '.sidebar', '.menu',
+    '.navigation', '.comments', '.social-share'
+  ];
   const clonedContent = content.cloneNode(true);
   
   elementsToRemove.forEach(selector => {
@@ -129,10 +143,19 @@ function extractWebPageContent(forceGenerate = false) {
   const text = clonedContent.innerText || clonedContent.textContent || '';
   const cleanText = text.replace(/\s+/g, ' ').trim();
   
-  if (cleanText.length > 500) {
+  console.log('Texto extraído, tamanho:', cleanText.length);
+  
+  if (cleanText.length > 300) {
     extractedText = cleanText;
     if (forceGenerate || shouldAutoSummarize(cleanText)) {
       generateSummary(cleanText);
+    } else {
+      console.log('Texto não atende critérios para auto-resumo');
+    }
+  } else {
+    console.log('Texto muito curto para resumo:', cleanText.length);
+    if (forceGenerate) {
+      showErrorPanel('Conteúdo insuficiente para gerar resumo (menos de 300 caracteres)');
     }
   }
 }
