@@ -198,6 +198,64 @@ function generateSummary(text) {
   });
 }
 
+// Utilidades de formatação
+function escapeHtml(s) {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function formatStructuredSummary(text) {
+  // Tenta converter lista numerada (1. Item: descrição) + subitens iniciados com "- " em HTML
+  const lines = (text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const items = [];
+  let current = null;
+  for (const line of lines) {
+    const numMatch = line.match(/^(\d+)[\.\)]\s+(.*)$/);
+    if (numMatch) {
+      if (current) items.push(current);
+      const rest = numMatch[2];
+      const parts = rest.split(':');
+      const title = parts.shift()?.trim() || rest.trim();
+      const desc = parts.join(':').trim();
+      current = { title, desc, subs: [] };
+      continue;
+    }
+    const subMatch = line.match(/^[-•]\s+(.*)$/);
+    if (subMatch && current) {
+      current.subs.push(subMatch[1].trim());
+      continue;
+    }
+    // Linha solta: agrega na descrição do item atual
+    if (current) {
+      current.desc = (current.desc ? current.desc + ' ' : '') + line;
+    }
+  }
+  if (current) items.push(current);
+
+  if (items.length === 0) {
+    // Fallback: apenas quebra de linha
+    return '<div class="summary-plain">' + escapeHtml(text).replace(/\n/g, '<br>') + '</div>';
+  }
+
+  let html = '<ol class="summary-list">';
+  for (const it of items) {
+    html += '<li><span class="summary-topic">' + escapeHtml(it.title) + '</span>';
+    if (it.desc) html += ': ' + escapeHtml(it.desc);
+    if (it.subs && it.subs.length) {
+      html += '<ul class="summary-sublist">';
+      for (const s of it.subs) {
+        html += '<li>' + escapeHtml(s) + '</li>';
+      }
+      html += '</ul>';
+    }
+    html += '</li>';
+  }
+  html += '</ol>';
+  return html;
+}
+
 // Mostrar painel de carregamento
 function showLoadingPanel() {
   createSidePanel();
@@ -219,6 +277,8 @@ function showSummaryPanel(summary) {
   const panel = document.getElementById('auto-summarizer-panel');
   const content = panel.querySelector('.panel-content');
   
+  const formatted = formatStructuredSummary(summary);
+
   content.innerHTML = `
     <div class="summary-header">
       <h3>📄 Resumo Gerado</h3>
@@ -228,7 +288,7 @@ function showSummaryPanel(summary) {
       </div>
     </div>
     <div class="summary-content">
-      <div class="summary-text">${summary.replace(/\n/g, '<br>')}</div>
+      <div class="summary-text">${formatted}</div>
     </div>
     <div class="summary-footer">
       <small>Resumo gerado por IA • Auto-Summarizer</small>
@@ -237,6 +297,7 @@ function showSummaryPanel(summary) {
   
   // Adicionar event listeners
   document.getElementById('copy-summary').addEventListener('click', () => {
+    // Copiar versão em texto simples
     navigator.clipboard.writeText(summary).then(() => {
       showToast('Resumo copiado!');
     });

@@ -201,6 +201,12 @@ body {
     line-height: 1.6;
     color: #4a5568;
 }
+/* Listas estruturadas dentro do histórico */
+.item-summary ol.summary-list { padding-left: 1.2rem; margin: 0; }
+.item-summary ol.summary-list > li { margin: 8px 0; }
+.item-summary .summary-topic { font-weight: 600; color: #2d3748; }
+.item-summary ul.summary-sublist { margin-top: 6px; padding-left: 1.2rem; list-style: disc; }
+.item-summary ul.summary-sublist li { margin: 4px 0; color: #4a5568; }
 
 .item-actions {
     display: flex;

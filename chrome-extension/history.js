@@ -7,6 +7,59 @@ document.addEventListener('DOMContentLoaded', function() {
     setupEventListeners();
 });
 
+// Utilidades de formatação (mesma lógica do content.js)
+function escapeHtml(s) {
+    return (s || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+function formatStructuredSummary(text) {
+    const lines = (text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const items = [];
+    let current = null;
+    for (const line of lines) {
+        const numMatch = line.match(/^(\d+)[\.\)]\s+(.*)$/);
+        if (numMatch) {
+            if (current) items.push(current);
+            const rest = numMatch[2];
+            const parts = rest.split(':');
+            const title = parts.shift()?.trim() || rest.trim();
+            const desc = parts.join(':').trim();
+            current = { title, desc, subs: [] };
+            continue;
+        }
+        const subMatch = line.match(/^[-•]\s+(.*)$/);
+        if (subMatch && current) {
+            current.subs.push(subMatch[1].trim());
+            continue;
+        }
+        if (current) {
+            current.desc = (current.desc ? current.desc + ' ' : '') + line;
+        }
+    }
+    if (current) items.push(current);
+
+    if (items.length === 0) {
+        return '<div class="summary-plain">' + escapeHtml(text).replace(/\n/g, '<br>') + '</div>';
+    }
+
+    let html = '<ol class="summary-list">';
+    for (const it of items) {
+        html += '<li><span class="summary-topic">' + escapeHtml(it.title) + '</span>';
+        if (it.desc) html += ': ' + escapeHtml(it.desc);
+        if (it.subs && it.subs.length) {
+            html += '<ul class="summary-sublist">';
+            for (const s of it.subs) html += '<li>' + escapeHtml(s) + '</li>';
+            html += '</ul>';
+        }
+        html += '</li>';
+    }
+    html += '</ol>';
+    return html;
+}
+
 // Configurar event listeners
 function setupEventListeners() {
     // Busca
@@ -154,6 +207,7 @@ function createHistoryItemHTML(item) {
     const date = new Date(item.timestamp);
     const timeAgo = formatTimeAgo(date);
     const favicon = item.favicon || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>';
+    const formatted = formatStructuredSummary(item.summary);
     
     return `
         <div class="history-item">
@@ -180,7 +234,7 @@ function createHistoryItemHTML(item) {
             ${item.url !== 'URL desconhecida' ? `<a href="${item.url}" class="item-url" target="_blank">${item.url}</a>` : ''}
             
             <div class="item-summary">
-                ${item.summary}
+                ${formatted}
             </div>
             
             <div class="item-actions">

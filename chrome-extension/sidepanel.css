@@ -143,10 +143,32 @@
   color: #4a5568;
 }
 
+/* Listas formatadas do resumo */
+.summary-list {
+  padding-left: 1.2rem;
+  margin: 0;
+}
+.summary-list > li {
+  margin: 10px 0;
+}
+.summary-topic {
+  font-weight: 600;
+  color: #2d3748;
+}
+.summary-sublist {
+  margin-top: 6px;
+  padding-left: 1.2rem;
+  list-style: disc;
+}
+.summary-sublist li {
+  margin: 4px 0;
+  color: #4a5568;
+}
+
 @media (prefers-color-scheme: dark) {
-  .summary-text {
-    color: #e2e8f0;
-  }
+  .summary-text { color: #e2e8f0; }
+  .summary-topic { color: #f7fafc; }
+  .summary-sublist li { color: #e2e8f0; }
 }
 
 /* Footer */
