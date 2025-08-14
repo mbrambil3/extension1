@@ -19,7 +19,7 @@ const FALLBACK_MODELS = [
   'google/gemini-2.0-flash-exp:free',
   'openai/gpt-oss-20b:free',
   'deepseek/deepseek-r1-distill-llama-70b:free'
-];
+]; // fallback é automático e ocorre em caso de 429/503, com cooldown progressivo
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
 function getApiKey() {
