@@ -219,7 +219,7 @@ function createHistoryItemHTML(item) {
     return `
         <div class="history-item">
             <div class="item-header">
-                ${isPdf ? '<div class="item-favicon" style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;"><img src="' + favicon + '" alt="Documento" style="width:20px;height:20px;"/></div>' : '<img src="' + favicon + '" alt="Favicon" class="item-favicon" onerror="this.style.display=\'none\'">'}
+                ${isPdf ? pdfIconHtml : siteIconHtml}
                 <h3 class="item-title">${item.title}</h3>
             </div>
             
