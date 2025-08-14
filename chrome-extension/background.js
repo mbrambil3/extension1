@@ -116,6 +116,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function orRequest(messages, model) {
+  // Sempre buscar a chave mais recente antes de requisitar (caso usuário tenha acabado de salvar no popup)
+  await new Promise((resolve) => chrome.storage.sync.get(['summarySettings'], (r) => { if (r && r.summarySettings) summarySettings = { ...summarySettings, ...r.summarySettings }; resolve(); }));
   const headers = { 'Authorization': `Bearer ${getApiKey()}`, 'Content-Type': 'application/json', 'HTTP-Referer': chrome.runtime.getURL(''), 'X-Title': 'Auto-Summarizer OR' };
   const body = JSON.stringify({ model, messages, temperature: 0.7, max_tokens: 1024 });
   const resp = await fetch(OR_URL, { method: 'POST', headers, body });
