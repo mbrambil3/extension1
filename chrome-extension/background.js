@@ -161,3 +161,54 @@ ${text.substring(0, 50000)}`; // Limitar texto para evitar exceder limites da AP
     throw error;
   }
 }
+
+// Função para salvar resumo no histórico
+async function saveToHistory(originalText, summary, tab) {
+  try {
+    const historyItem = {
+      id: Date.now() + Math.random(),
+      title: tab?.title || 'Página sem título',
+      url: tab?.url || 'URL desconhecida',
+      favicon: tab?.favIconUrl || null,
+      originalText: originalText.substring(0, 500) + (originalText.length > 500 ? '...' : ''),
+      summary: summary,
+      timestamp: new Date().toISOString(),
+      wordCount: originalText.split(' ').length
+    };
+    
+    const result = await chrome.storage.local.get('summaryHistory');
+    const history = result.summaryHistory || [];
+    
+    // Adicionar no início da lista e manter apenas últimos 50
+    history.unshift(historyItem);
+    const limitedHistory = history.slice(0, 50);
+    
+    await chrome.storage.local.set({ summaryHistory: limitedHistory });
+    console.log('Resumo salvo no histórico:', historyItem.title);
+    
+  } catch (error) {
+    console.error('Erro ao salvar no histórico:', error);
+  }
+}
+
+// Função para obter histórico
+async function getHistory() {
+  try {
+    const result = await chrome.storage.local.get('summaryHistory');
+    return result.summaryHistory || [];
+  } catch (error) {
+    console.error('Erro ao obter histórico:', error);
+    return [];
+  }
+}
+
+// Função para limpar histórico
+async function clearHistory() {
+  try {
+    await chrome.storage.local.remove('summaryHistory');
+    console.log('Histórico limpo com sucesso');
+  } catch (error) {
+    console.error('Erro ao limpar histórico:', error);
+    throw error;
+  }
+}
