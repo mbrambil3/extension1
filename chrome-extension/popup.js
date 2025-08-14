@@ -17,8 +17,8 @@ function loadSettings() {
             document.getElementById('language').value = response.settings.language;
             document.getElementById('detailLevel').value = response.settings.detailLevel;
             document.getElementById('openrouterKey').value = response.settings.openrouterKey || '';
-            updateStatusIndicator(response.isActive);
-            // Atualiza indicador de status e provedor usado recentemente
+            updateStatusIndicator(!!(response.settings && response.settings.autoSummary));
+            // Atualiza texto do provedor no rodapé com base no último modelo utilizado
             try {
                 const res = await chrome.storage.local.get('lastModelUsed');
                 const model = (res && res.lastModelUsed) ? String(res.lastModelUsed) : '';
