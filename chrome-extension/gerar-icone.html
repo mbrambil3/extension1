@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Gerador de Ícone PNG</title>
+</head>
+<body>
+    <h2>Ícone gerado automaticamente:</h2>
+    <canvas id="iconCanvas" width="128" height="128" style="border: 1px solid #ccc;"></canvas>
+    <br><br>
+    <button onclick="downloadIcon()">Download como icon.png</button>
+    
+    <script>
+        // Criar ícone no canvas
+        const canvas = document.getElementById('iconCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Background gradient
+        const gradient = ctx.createLinearGradient(0, 0, 128, 128);
+        gradient.addColorStop(0, '#4facfe');
+        gradient.addColorStop(1, '#00f2fe');
+        
+        // Círculo de fundo
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(64, 64, 60, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Borda branca
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+        
+        // Documento
+        ctx.fillStyle = 'white';
+        ctx.fillRect(35, 30, 38, 48);
+        ctx.strokeStyle = '#ddd';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(35, 30, 38, 48);
+        
+        // Linhas de texto
+        ctx.strokeStyle = '#666';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(40, 40);
+        ctx.lineTo(64, 40);
+        ctx.moveTo(40, 46);
+        ctx.lineTo(68, 46);
+        ctx.moveTo(40, 52);
+        ctx.lineTo(62, 52);
+        ctx.stroke();
+        
+        // IA sparkle
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.arc(85, 85, 12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ff6b35';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        // Centro do sparkle
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(85, 85, 4, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Seta
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.beginPath();
+        ctx.moveTo(64, 90);
+        ctx.lineTo(74, 96);
+        ctx.lineTo(64, 102);
+        ctx.lineTo(69, 96);
+        ctx.fill();
+        
+        function downloadIcon() {
+            const link = document.createElement('a');
+            link.download = 'icon.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+        
+        // Auto-download após 2 segundos
+        setTimeout(() => {
+            console.log('Auto-downloading icon...');
+            downloadIcon();
+        }, 2000);
+    </script>
+    
+    <p><strong>Instruções:</strong></p>
+    <ol>
+        <li>O ícone será baixado automaticamente em 2 segundos</li>
+        <li>Salve o arquivo como <code>icon.png</code> na pasta da extensão</li>
+        <li>Recarregue a extensão em <code>chrome://extensions/</code></li>
+    </ol>
+</body>
+</html>
