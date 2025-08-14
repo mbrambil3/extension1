@@ -318,3 +318,34 @@
 .auto-summarizer-panel * {
   box-sizing: border-box;
 }
+
+/* ============================
+   Hard overrides for summary typography
+   Ensures consistent white text, simple font, only topics bold
+   ============================ */
+.auto-summarizer-panel .summary-text,
+.auto-summarizer-panel .summary-text ol,
+.auto-summarizer-panel .summary-text ul,
+.auto-summarizer-panel .summary-text li,
+.auto-summarizer-panel .summary-list,
+.auto-summarizer-panel .summary-sublist {
+  color: #ffffff !important;
+  font-weight: 400 !important;
+  font-size: 14px !important;
+  line-height: 1.7 !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  text-decoration: none !important;
+}
+
+.auto-summarizer-panel .summary-topic {
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+
+.auto-summarizer-panel .summary-list {
+  list-style: decimal !important;
+}
+
+.auto-summarizer-panel .summary-sublist {
+  list-style: disc !important;
+}
