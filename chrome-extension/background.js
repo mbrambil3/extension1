@@ -121,13 +121,33 @@ async function orRequest(messages, model) {
 }
 
 async function orWithFallback(messages) {
-  try { return await orRequest(messages, PRIMARY_MODEL); }
-  catch (e) {
-    if (e.status !== 429 && e.status !== 503) throw e;
-    await setCooldown(20000);
+  const shouldFallback = (err) => {
+    if (!err) return true;
+    const s = err.status;
+    const msg = String(err.message || '').toLowerCase();
+    if (s === 429 || s === 503) return true; // limite/indisponível
+    if (typeof s === 'number' && s >= 500) return true; // outros 5xx
+    if (!s) return true; // erros de rede/fetch
+    if (msg.includes('failed to fetch') || msg.includes('network') || msg.includes('timeout')) return true;
+    return false;
+  };
+
+  try {
+    return await orRequest(messages, PRIMARY_MODEL);
+  } catch (e) {
+    if (!shouldFallback(e)) throw e;
+    if (e && (e.status === 429 || e.status === 503)) await setCooldown(20000);
     for (const m of FALLBACK_MODELS) {
-      try { return await orRequest(messages, m); }
-      catch (err) { if (err.status === 429 || err.status === 503) { await setCooldown(20000); continue; } else { throw err; } }
+      try {
+        return await orRequest(messages, m);
+      } catch (err) {
+        if (shouldFallback(err)) {
+          if (err && (err.status === 429 || err.status === 503)) await setCooldown(20000);
+          continue;
+        } else {
+          throw err;
+        }
+      }
     }
     throw e;
   }
