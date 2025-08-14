@@ -83,6 +83,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(error => sendResponse({ success: false, error: error.message }));
     return true; // Mantém o canal de resposta aberto para async
   }
+
+  if (message.action === 'summarizePdfBinary') {
+    // Recebe um ArrayBuffer do popup e tenta extrair texto com PDF.js (próxima versão)
+    // Aqui, como fallback imediato, iremos criar um registro no histórico com indicação de PDF importado
+    // e tentar resumir a partir de metadata simples (não ideal). Próxima etapa: embutir PDF.js.
+    try {
+      const arrayBuffer = message.data;
+      const name = message.name || 'Documento PDF';
+      if (!arrayBuffer) throw new Error('Arquivo não recebido');
+
+      // Por ora, enviaremos um aviso de que a extração completa virá na próxima atualização
+      const placeholderText = `Arquivo importado: ${name}. A extração completa de texto de PDF será habilitada na próxima atualização.`;
+
+      generateSummaryWithGemini(placeholderText, summarySettings)
+        .then(summary => {
+          // Salvar no histórico com dados mínimos
+          const tabInfo = sender?.tab || { title: name, url: 'arquivo-importado' };
+          saveToHistory(placeholderText, summary, tabInfo);
+          sendResponse({ success: true, summary });
+        })
+        .catch(err => sendResponse({ success: false, error: err.message }));
+      return true;
+    } catch (e) {
+      sendResponse({ success: false, error: e.message });
+      return true;
+    }
+  }
   
   if (message.action === "getHistory") {
     getHistory().then(history => sendResponse({ history }));

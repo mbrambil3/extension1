@@ -56,6 +56,35 @@ function setupEventListeners() {
     document.getElementById('viewHistory').addEventListener('click', function() {
         openHistoryWindow();
     });
+
+    // Importar PDF
+    document.getElementById('pdfInput').addEventListener('change', function(e) {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        if (file.type !== 'application/pdf') {
+            showToast('Selecione um arquivo PDF', 'error');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = function() {
+            const arrayBuffer = reader.result;
+            // Enviar para background gerar resumo a partir do PDF binário
+            chrome.runtime.sendMessage({ action: 'summarizePdfBinary', data: arrayBuffer, name: file.name }, (response) => {
+                if (chrome.runtime.lastError) {
+                    showToast('Erro: ' + chrome.runtime.lastError.message, 'error');
+                    return;
+                }
+                if (response && response.success) {
+                    showToast('Resumo sendo gerado...', 'success');
+                    // Fechar popup após início
+                    setTimeout(() => window.close(), 1200);
+                } else {
+                    showToast(response?.error || 'Falha ao iniciar resumo do PDF', 'error');
+                }
+            });
+        };
+        reader.readAsArrayBuffer(file);
+    });
 }
 
 // Salvar configurações
@@ -68,7 +97,7 @@ function saveSettings() {
     
     chrome.runtime.sendMessage({
         action: "updateSettings",
-        isActive: true,
+        isActive: document.getElementById('autoSummary').checked, // manter consistência
         settings: settings
     }, (response) => {
         if (response && response.success) {
@@ -106,10 +135,8 @@ function generateSummaryNow() {
                 if (response && response.received) {
                     if (response.started) {
                         showToast('Resumo sendo gerado...', 'success');
-                        // Fechar popup apenas se o processo realmente iniciou no content script
                         setTimeout(() => window.close(), 1200);
                     } else {
-                        // Não fechar, mostrar causa
                         showToast(response.errorMessage || 'Conteúdo não suportado para extração direta', 'warning');
                     }
                 } else {
