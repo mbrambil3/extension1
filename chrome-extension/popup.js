@@ -17,7 +17,7 @@ function loadSettings() {
             document.getElementById('language').value = response.settings.language;
             document.getElementById('detailLevel').value = response.settings.detailLevel;
             document.getElementById('openrouterKey').value = response.settings.openrouterKey || '';
-            updateStatusIndicator(!!(response.settings && response.settings.autoSummary));
+            // Indicador de Extensão Ativa/Inativa removido
             // Atualiza texto do provedor no rodapé com base no último modelo utilizado
             try {
                 const res = await chrome.storage.local.get('lastModelUsed');
