@@ -146,16 +146,31 @@ function shouldAutoSummarize(text) {
 
 // Gerar resumo usando background script
 function generateSummary(text) {
+  if (!text || text.length < 100) {
+    showErrorPanel('Texto muito curto para gerar resumo');
+    return;
+  }
+  
   showLoadingPanel();
+  
+  console.log('Enviando texto para background script, tamanho:', text.length);
   
   chrome.runtime.sendMessage({
     action: "generateSummary",
     text: text
   }, (response) => {
+    console.log('Resposta do background script:', response);
+    
+    if (chrome.runtime.lastError) {
+      console.error('Erro de runtime:', chrome.runtime.lastError);
+      showErrorPanel('Erro de comunicação: ' + chrome.runtime.lastError.message);
+      return;
+    }
+    
     if (response && response.success) {
       showSummaryPanel(response.summary);
     } else {
-      showErrorPanel(response?.error || 'Erro desconhecido');
+      showErrorPanel(response?.error || 'Erro desconhecido ao gerar resumo');
     }
   });
 }
