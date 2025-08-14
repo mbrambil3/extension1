@@ -18,12 +18,9 @@ function loadSettings() {
             document.getElementById('detailLevel').value = response.settings.detailLevel;
             document.getElementById('openrouterKey').value = response.settings.openrouterKey || '';
             updateStatusIndicator(response.isActive);
-            // Exibir último modelo utilizado
+            // Atualiza indicador de status e provedor usado recentemente
             try {
-                const res = await chrome.storage.local.get('lastModelUsed');
-                const model = res.lastModelUsed || '—';
-                const md = document.getElementById('modelDisplay');
-                if (md) md.textContent = model;
+                await updateProviderDisplay();
             } catch (e) {}
         }
     });
