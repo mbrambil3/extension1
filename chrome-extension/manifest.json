@@ -44,7 +44,7 @@
   
   "web_accessible_resources": [
     {
-      "resources": ["sidepanel.html", "sidepanel.css", "gemini-api.js"],
+      "resources": ["sidepanel.html", "sidepanel.css", "gemini-api.js", "history.html", "history.css", "history.js"],
       "matches": ["<all_urls>"]
     }
   ]
