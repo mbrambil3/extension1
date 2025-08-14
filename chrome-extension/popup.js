@@ -58,7 +58,7 @@ function setupEventListeners() {
     });
 
     // Importar PDF
-    document.getElementById('pdfInput').addEventListener('change', function(e) {
+    document.getElementById('pdfInput').addEventListener('change', async function(e) {
         const file = e.target.files && e.target.files[0];
         if (!file) return;
         if (file.type !== 'application/pdf') {
@@ -66,22 +66,49 @@ function setupEventListeners() {
             return;
         }
         const reader = new FileReader();
-        reader.onload = function() {
-            const arrayBuffer = reader.result;
-            // Enviar para background gerar resumo a partir do PDF binário
-            chrome.runtime.sendMessage({ action: 'summarizePdfBinary', data: arrayBuffer, name: file.name }, (response) => {
-                if (chrome.runtime.lastError) {
-                    showToast('Erro: ' + chrome.runtime.lastError.message, 'error');
+        reader.onload = async function() {
+            try {
+                const arrayBuffer = reader.result;
+                const uint8 = new Uint8Array(arrayBuffer);
+                const pdfjs = window.pdfjsLib;
+                if (!pdfjs) {
+                    showToast('PDF.js não carregou. Recarregue a extensão.', 'error');
                     return;
                 }
-                if (response && response.success) {
-                    showToast('Resumo sendo gerado...', 'success');
-                    // Fechar popup após início
-                    setTimeout(() => window.close(), 1200);
-                } else {
-                    showToast(response?.error || 'Falha ao iniciar resumo do PDF', 'error');
+                // Usar sem worker para simplificar no contexto do popup
+                try {
+                    pdfjs.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('pdfjs/pdf.worker.min.js');
+                } catch (e) { /* opcional */ }
+                const doc = await pdfjs.getDocument({ data: uint8, disableWorker: true }).promise;
+                let fullText = '';
+                const pages = Math.min(doc.numPages, 10);
+                for (let i = 1; i <= pages; i++) {
+                    const page = await doc.getPage(i);
+                    const content = await page.getTextContent();
+                    fullText += content.items.map(it => it.str).join(' ') + '\n';
                 }
-            });
+                fullText = (fullText || '').trim();
+                if (!fullText || fullText.length < 50) {
+                    showToast('Não foi possível extrair texto do PDF', 'error');
+                    return;
+                }
+                const payload = `Arquivo: ${file.name}\n\n${fullText.substring(0, 50000)}`;
+                chrome.runtime.sendMessage({ action: 'generateSummary', text: payload }, (response) => {
+                    if (chrome.runtime.lastError) {
+                        showToast('Erro: ' + chrome.runtime.lastError.message, 'error');
+                        return;
+                    }
+                    if (response && response.success) {
+                        showToast('Resumo sendo gerado...', 'success');
+                        setTimeout(() => window.close(), 1200);
+                    } else {
+                        showToast(response?.error || 'Falha ao iniciar resumo do PDF', 'error');
+                    }
+                });
+            } catch (err) {
+                console.error('Falha ao processar PDF:', err);
+                showToast('Falha ao processar PDF: ' + (err?.message || err), 'error');
+            }
         };
         reader.readAsArrayBuffer(file);
     });
