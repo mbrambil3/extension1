@@ -78,11 +78,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ success: false, error: 'Conteúdo insuficiente para gerar resumo' });
       return true;
     }
+    const fromPdf = message.source === 'pdf';
+    const fileName = message.fileName || 'Documento PDF';
     generateSummaryWithGemini(message.text, summarySettings)
-      .then(summary => {
+      .then(async summary => {
+        // Gerar um título com IA apenas para PDFs importados
+        let inferredTitle = null;
+        if (fromPdf) {
+          try {
+            inferredTitle = await generateTitleWithGemini(message.text, summarySettings, fileName);
+          } catch (e) {
+            inferredTitle = null;
+          }
+        }
         // Salvar no histórico
-        saveToHistory(message.text, summary, sender.tab);
-        sendResponse({ success: true, summary });
+        await saveToHistory(message.text, summary, sender.tab, { inferredTitle: inferredTitle || fileName, source: fromPdf ? 'pdf' : 'web' });
+        sendResponse({ success: true, summary, title: inferredTitle || fileName });
       })
       .catch(error => {
         // Trate erros de rede (Failed to fetch) e 503 com mensagem amigável
