@@ -47,10 +47,14 @@ function ensurePdfJsLoaded() {
   if (self.pdfjsLib) return Promise.resolve(self.pdfjsLib);
   return new Promise((resolve, reject) => {
     try {
-      importScripts('pdfjs/pdf.min.js');
-      // Configura o worker
+      const url = chrome.runtime.getURL('pdfjs/pdf.min.js');
+      importScripts(url);
       if (self.pdfjsLib) {
-        self.pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('pdfjs/pdf.worker.min.js');
+        try {
+          self.pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('pdfjs/pdf.worker.min.js');
+        } catch (e) {
+          // Continua mesmo se não conseguir configurar o worker; usaremos disableWorker no getDocument
+        }
         resolve(self.pdfjsLib);
       } else {
         reject(new Error('pdfjsLib não disponível'));
