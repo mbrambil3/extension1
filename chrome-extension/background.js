@@ -55,9 +55,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   if (message.action === "generateSummary") {
     generateSummaryWithGemini(message.text, summarySettings)
-      .then(summary => sendResponse({ success: true, summary }))
+      .then(summary => {
+        // Salvar no histórico
+        saveToHistory(message.text, summary, sender.tab);
+        sendResponse({ success: true, summary });
+      })
       .catch(error => sendResponse({ success: false, error: error.message }));
     return true; // Mantém o canal de resposta aberto para async
+  }
+  
+  if (message.action === "getHistory") {
+    getHistory().then(history => sendResponse({ history }));
+    return true;
+  }
+  
+  if (message.action === "clearHistory") {
+    clearHistory().then(() => sendResponse({ success: true }));
+    return true;
   }
 });
 
