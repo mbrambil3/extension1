@@ -81,6 +81,8 @@ function generateSummaryNow() {
     // Enviar mensagem para a aba ativa
     chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
         if (tabs[0]) {
+            console.log('Enviando mensagem para tab:', tabs[0].id);
+            
             chrome.tabs.sendMessage(tabs[0].id, {
                 action: "generateSummary",
                 manual: true
@@ -88,12 +90,18 @@ function generateSummaryNow() {
                 button.classList.remove('loading');
                 button.textContent = '🎯 Gerar Resumo Agora';
                 
+                if (chrome.runtime.lastError) {
+                    console.error('Erro de runtime:', chrome.runtime.lastError);
+                    showToast('Erro: ' + chrome.runtime.lastError.message, 'error');
+                    return;
+                }
+                
                 if (response && response.received) {
                     showToast('Resumo sendo gerado...', 'success');
                     // Fechar popup após iniciar o processo
-                    setTimeout(() => window.close(), 1000);
+                    setTimeout(() => window.close(), 1500);
                 } else {
-                    showToast('Erro ao comunicar com a página', 'error');
+                    showToast('A página pode não ter conteúdo suficiente', 'warning');
                 }
             });
         } else {
