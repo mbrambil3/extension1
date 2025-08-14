@@ -196,12 +196,20 @@ function generateSummaryNow() {
         }
 
         // Tenta enviar; se não houver receiver, injeta e pede para clicar de novo
-        chrome.tabs.sendMessage(tab.id, { ping: true }, async function() {
-            if (chrome.runtime.lastError) {
+        chrome.tabs.sendMessage(tab.id, { ping: true }, async function(response) {
+            if (chrome.runtime.lastError || !response || !response.pong) {
                 const injected = await injectContentScript(tab.id);
-                // Damos feedback e pedimos novo clique (para segurança)
                 if (injected) {
-                    showToast('Página preparada. Clique novamente em "Gerar Resumo".', 'success');
+                    // Tenta novamente automaticamente após injeção
+                    setTimeout(() => {
+                        chrome.tabs.sendMessage(tab.id, { ping: true }, function(resp2) {
+                            if (!chrome.runtime.lastError && resp2 && resp2.pong) {
+                                sendGenerate();
+                            } else {
+                                showToast('Não foi possível preparar a página para resumo', 'error');
+                            }
+                        });
+                    }, 300);
                 } else {
                     showToast('Não foi possível preparar a página para resumo', 'error');
                 }
