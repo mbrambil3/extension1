@@ -77,6 +77,8 @@ function setupEventListeners() {
                     return;
                 }
                 const payload = `Arquivo: ${file.name}\n\n${fullText.substring(0, 50000)}`;
+                // Feedback imediato no popup
+                showToast('Importando PDF... O resumo aparecerá no Histórico em instantes.', 'success');
                 chrome.runtime.sendMessage({ action: 'generateSummary', text: payload, source: 'pdf', fileName: file.name }, (response) => {
                     if (chrome.runtime.lastError) {
                         showToast('Erro: ' + chrome.runtime.lastError.message, 'error');
