@@ -3,7 +3,9 @@ let isExtensionActive = true;
 let summarySettings = {
   autoSummary: true,
   language: 'pt',
-  detailLevel: 'medium'
+  detailLevel: 'medium',
+  provider: 'gemini',
+  openrouterKey: ''
 };
 
 // Carregar configurações ao iniciar e a cada inicialização do service worker
@@ -45,7 +47,6 @@ chrome.commands.onCommand.addListener((command) => {
 // Gerenciar mensagens entre scripts
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "getSettings") {
-    // Sempre retorne o estado real carregado do storage
     loadSettingsFromStorage(() => {
       sendResponse({ 
         isActive: isExtensionActive,
@@ -62,12 +63,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.settings && typeof message.settings === 'object') {
       summarySettings = { ...summarySettings, ...message.settings };
     }
-    
     chrome.storage.sync.set({
       extensionActive: isExtensionActive,
       summarySettings: summarySettings
     }, () => {
-      // Garantir consistência ao responder
       sendResponse({ success: true, isActive: isExtensionActive, settings: summarySettings });
     });
     return true;
@@ -80,47 +79,59 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     const fromPdf = message.source === 'pdf';
     const fileName = message.fileName || 'Documento PDF';
-    generateSummaryWithGemini(message.text, summarySettings)
-      .then(async summary => {
-        if (fromPdf) {
-          // Gerar um título com IA apenas para PDFs importados
-          let inferredTitle = null;
-          try {
-            inferredTitle = await generateTitleWithGemini(message.text, summarySettings, fileName);
-          } catch (e) {
-            inferredTitle = null;
-          }
-          await saveToHistory(message.text, summary, sender.tab, { inferredTitle: inferredTitle || fileName, source: 'pdf' });
-          sendResponse({ success: true, summary, title: inferredTitle || fileName });
-        } else {
-          // Conteúdo web: manter o título da aba intacto
-          await saveToHistory(message.text, summary, sender.tab);
-          sendResponse({ success: true, summary, title: sender?.tab?.title || 'Página' });
-        }
-      })
-      .catch(error => {
-        // Trate erros de rede (Failed to fetch) e 503 com mensagem amigável
-        const msg = (error && error.message) ? error.message : 'Falha ao acessar o serviço de IA';
-        let display = msg;
-        if (msg.includes('503') || /UNAVAILABLE/i.test(msg) || /Failed to fetch/i.test(msg)) {
-          display = 'Serviço temporariamente indisponível. Tente novamente em alguns segundos.';
-        }
-        sendResponse({ success: false, error: display });
-      });
-    return true; // Mantém o canal de resposta aberto para async
-  }
 
+    const run = async () => {
+      const provider = (summarySettings.provider || 'gemini').toLowerCase();
+      let summary = '';
+      if (provider === 'deepseek') {
+        summary = await generateSummaryWithOpenRouter(message.text, summarySettings);
+      } else {
+        summary = await generateSummaryWithGemini(message.text, summarySettings);
+      }
+
+      if (fromPdf) {
+        let inferredTitle = null;
+        try {
+          if (provider === 'deepseek') {
+            inferredTitle = await generateTitleWithOpenRouter(message.text, summarySettings, fileName);
+          } else {
+            inferredTitle = await generateTitleWithGemini(message.text, summarySettings, fileName);
+          }
+        } catch (e) { inferredTitle = null; }
+        await saveToHistory(message.text, summary, sender.tab, { inferredTitle: inferredTitle || fileName, source: 'pdf' });
+        sendResponse({ success: true, summary, title: inferredTitle || fileName });
+      } else {
+        // Websites: manter título da aba intacto
+        await saveToHistory(message.text, summary, sender.tab);
+        sendResponse({ success: true, summary, title: sender?.tab?.title || 'Página' });
+      }
+    };
+
+    run().catch(error => {
+      const msg = (error && error.message) ? error.message : 'Falha ao acessar o serviço de IA';
+      let display = msg;
+      if (msg.includes('503') || /UNAVAILABLE/i.test(msg) || /Failed to fetch/i.test(msg)) {
+        display = 'Serviço temporariamente indisponível. Tente novamente em alguns segundos.';
+      }
+      sendResponse({ success: false, error: display });
+    });
+    return true;
+  }
+  
   if (message.action === 'summarizePdfBinary') {
-    // Mantido para compatibilidade; hoje a extração ocorre no popup
+    // Mantido para compatibilidade (atual extração é feita no popup)
     (async () => {
       try {
         const arrayBuffer = message.data;
         const name = message.name || 'Documento PDF';
         if (!arrayBuffer) throw new Error('Arquivo não recebido');
         const text = 'Arquivo importado: ' + name + ' (extração é feita no popup).';
-        const summary = await generateSummaryWithGemini(text, summarySettings);
+        const provider = (summarySettings.provider || 'gemini').toLowerCase();
+        const summary = provider === 'deepseek'
+          ? await generateSummaryWithOpenRouter(text, summarySettings)
+          : await generateSummaryWithGemini(text, summarySettings);
         const tabInfo = sender?.tab || { title: name, url: 'arquivo-importado' };
-        await saveToHistory(text, summary, tabInfo);
+        await saveToHistory(text, summary, tabInfo, { inferredTitle: name, source: 'pdf' });
         sendResponse({ success: true, summary });
       } catch (e) {
         sendResponse({ success: false, error: e.message });
@@ -140,25 +151,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// Função para gerar resumo usando Gemini API (com retry/backoff para 429/503)
+// ===== Gemini =====
 async function generateSummaryWithGemini(text, settings) {
   const API_KEY = 'AIzaSyCGqaKkd1NKGfo9aygrx92ecIjy8nqlk0c';
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
-  
-  // Configurar prompt baseado nas configurações
   let detailPrompt = '';
   switch (settings.detailLevel) {
-    case 'short':
-      detailPrompt = 'Crie um resumo muito breve (máximo 3 pontos principais)';
-      break;
-    case 'medium':
-      detailPrompt = 'Crie um resumo conciso com os pontos principais (5-7 pontos)';
-      break;
-    case 'long':
-      detailPrompt = 'Crie um resumo detalhado e abrangente';
-      break;
+    case 'short': detailPrompt = 'Crie um resumo muito breve (máximo 3 pontos principais)'; break;
+    case 'medium': detailPrompt = 'Crie um resumo conciso com os pontos principais (5-7 pontos)'; break;
+    case 'long': detailPrompt = 'Crie um resumo detalhado e abrangente'; break;
   }
-  
   const prompt = `${detailPrompt} do seguinte texto em ${settings.language === 'pt' ? 'português' : 'inglês'}.
 
 Regras de formatação (siga exatamente):
@@ -169,60 +171,103 @@ Regras de formatação (siga exatamente):
 5) Não envolva a resposta em blocos de código; retorne apenas texto simples estruturado
 
 Texto a resumir:
-${text.substring(0, 50000)}`; // Limitar texto para evitar exceder limites da API
+${text.substring(0, 50000)}`;
 
   const body = JSON.stringify({
     contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: 0.7,
-      topK: 40,
-      topP: 0.95,
-      maxOutputTokens: 1024,
-    },
-    safetySettings: [
-      { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-      { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-      { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-      { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" }
-    ]
+    generationConfig: { temperature: 0.7, topK: 40, topP: 0.95, maxOutputTokens: 1024 }
   });
 
-  async function tryOnce() {
-    const resp = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body
-    });
-    if (!resp.ok) {
-      const text = await resp.text();
-      const err = new Error(`Erro na API: ${resp.status} - ${text}`);
-      err.status = resp.status;
-      throw err;
-    }
-    const data = await resp.json();
-    if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-      return data.candidates[0].content.parts[0].text;
-    }
-    throw new Error('Resposta inválida da API');
+  const resp = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+  if (!resp.ok) {
+    const t = await resp.text();
+    const err = new Error(`Erro na API: ${resp.status} - ${t}`);
+    err.status = resp.status; throw err;
   }
-
-  const maxAttempts = 3;
-  let attempt = 0;
-  while (true) {
-    try {
-      return await tryOnce();
-    } catch (e) {
-      attempt++;
-      if (attempt >= maxAttempts || ![429, 500, 502, 503, 504].includes(e.status)) {
-        throw e;
-      }
-      const delay = Math.min(4000, 500 * Math.pow(2, attempt - 1));
-      await new Promise(r => setTimeout(r, delay));
-    }
-  }
+  const data = await resp.json();
+  const out = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!out) throw new Error('Resposta inválida da API');
+  return out;
 }
 
-// Função para salvar resumo no histórico
+async function generateTitleWithGemini(text, settings, fallbackName) {
+  const API_KEY = 'AIzaSyCGqaKkd1NKGfo9aygrx92ecIjy8nqlk0c';
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+  const prompt = `Gere um título curto e descritivo (no máximo 10 palavras) para o seguinte conteúdo de arquivo PDF. Não use aspas, não use markdown. Caso seja um documento de empresa, inclua o nome/identificador.\n\nConteúdo (parcial):\n${text.substring(0, 2000)}`;
+  const body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] });
+  const resp = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+  if (!resp.ok) return fallbackName;
+  const data = await resp.json();
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || fallbackName;
+}
+
+// ===== OpenRouter / DeepSeek =====
+async function generateSummaryWithOpenRouter(text, settings) {
+  const apiKey = settings.openrouterKey || '';
+  if (!apiKey || !apiKey.startsWith('sk-')) {
+    throw new Error('OpenRouter API Key ausente. Configure no popup.');
+  }
+  const url = 'https://openrouter.ai/api/v1/chat/completions';
+  let detailPrompt = '';
+  switch (settings.detailLevel) {
+    case 'short': detailPrompt = 'Crie um resumo muito breve (máximo 3 pontos principais)'; break;
+    case 'medium': detailPrompt = 'Crie um resumo conciso com os pontos principais (5-7 pontos)'; break;
+    case 'long': detailPrompt = 'Crie um resumo detalhado e abrangente'; break;
+  }
+  const userText = `${detailPrompt} do seguinte texto em ${settings.language === 'pt' ? 'português' : 'inglês'}.\n\nRegras de formatação (siga exatamente):\n1) Produza de 3 a 8 pontos principais como lista numerada (1., 2., 3., ...)\n2) Em cada item, comece com um tópico curto (3–8 palavras), seguido de dois pontos e, em seguida, uma explicação breve em uma única frase\n3) Quando for útil, adicione 1–3 subitens iniciados com "- " (hífen e espaço), cada um curto\n4) Não use markdown com **asteriscos**, títulos ou blocos de código\n5) Não envolva a resposta em blocos de código; retorne apenas texto simples estruturado\n\nTexto a resumir:\n${text.substring(0, 50000)}`;
+
+  const payload = {
+    model: 'deepseek/deepseek-r1-0528:free',
+    messages: [
+      { role: 'system', content: 'Você é um assistente de resumo que retorna lista numerada com tópicos curtos e subitens quando necessário.' },
+      { role: 'user', content: userText }
+    ],
+    temperature: 0.7,
+    max_tokens: 1024
+  };
+
+  const headers = {
+    'Authorization': `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
+    'HTTP-Referer': chrome.runtime.getURL(''),
+    'X-Title': 'Auto-Summarizer DeepSeek'
+  };
+
+  const resp = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
+  if (!resp.ok) {
+    let detail = await resp.text();
+    throw new Error(`OpenRouter API error: ${resp.status} - ${detail}`);
+  }
+  const data = await resp.json();
+  const out = data?.choices?.[0]?.message?.content;
+  if (!out) throw new Error('Resposta inválida da OpenRouter');
+  return out;
+}
+
+async function generateTitleWithOpenRouter(text, settings, fallbackName) {
+  const apiKey = settings.openrouterKey || '';
+  if (!apiKey || !apiKey.startsWith('sk-')) return fallbackName;
+  const url = 'https://openrouter.ai/api/v1/chat/completions';
+  const prompt = `Gere um título curto e descritivo (no máximo 10 palavras) para o seguinte conteúdo de arquivo PDF. Não use aspas, não use markdown. Caso seja um documento de empresa, inclua o nome/identificador.\n\nConteúdo (parcial):\n${text.substring(0, 2000)}`;
+  const payload = {
+    model: 'deepseek/deepseek-r1-0528:free',
+    messages: [ { role: 'user', content: prompt } ],
+    temperature: 0.2,
+    max_tokens: 64
+  };
+  const headers = {
+    'Authorization': `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
+    'HTTP-Referer': chrome.runtime.getURL(''),
+    'X-Title': 'Auto-Summarizer DeepSeek'
+  };
+  const resp = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
+  if (!resp.ok) return fallbackName;
+  const data = await resp.json();
+  return data?.choices?.[0]?.message?.content?.trim() || fallbackName;
+}
+
+// Histórico
 async function saveToHistory(originalText, summary, tab, options = {}) {
   try {
     const historyItem = {
@@ -235,23 +280,16 @@ async function saveToHistory(originalText, summary, tab, options = {}) {
       timestamp: new Date().toISOString(),
       wordCount: originalText.split(' ').length
     };
-    
     const result = await chrome.storage.local.get('summaryHistory');
     const history = result.summaryHistory || [];
-    
-    // Adicionar no início da lista e manter apenas últimos 50
     history.unshift(historyItem);
     const limitedHistory = history.slice(0, 50);
-    
     await chrome.storage.local.set({ summaryHistory: limitedHistory });
-    console.log('Resumo salvo no histórico:', historyItem.title);
-    
   } catch (error) {
     console.error('Erro ao salvar no histórico:', error);
   }
 }
 
-// Função para obter histórico
 async function getHistory() {
   try {
     const result = await chrome.storage.local.get('summaryHistory');
@@ -262,11 +300,9 @@ async function getHistory() {
   }
 }
 
-// Função para limpar histórico
 async function clearHistory() {
   try {
     await chrome.storage.local.remove('summaryHistory');
-    console.log('Histórico limpo com sucesso');
   } catch (error) {
     console.error('Erro ao limpar histórico:', error);
     throw error;

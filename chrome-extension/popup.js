@@ -11,62 +11,48 @@ document.addEventListener('DOMContentLoaded', function() {
     setupEventListeners();
 });
 
+function toggleOpenRouterKeyRow(provider) {
+    const row = document.getElementById('openrouterKeyRow');
+    row.style.display = provider === 'deepseek' ? 'block' : 'none';
+}
+
 // Carregar configurações salvas
 function loadSettings() {
     chrome.runtime.sendMessage({ action: "getSettings" }, (response) => {
         if (response) {
-            // Configurar toggle de resumo automático
             document.getElementById('autoSummary').checked = response.settings.autoSummary;
-            
-            // Configurar idioma
             document.getElementById('language').value = response.settings.language;
-            
-            // Configurar nível de detalhe
             document.getElementById('detailLevel').value = response.settings.detailLevel;
-            
-            // Atualizar status da extensão
+            document.getElementById('provider').value = response.settings.provider || 'gemini';
+            document.getElementById('openrouterKey').value = response.settings.openrouterKey || '';
+            toggleOpenRouterKeyRow(response.settings.provider || 'gemini');
             updateStatusIndicator(response.isActive);
         }
     });
 }
 
-function isRestrictedUrl(url) {
-    return url.startsWith('chrome://') || url.startsWith('chrome-extension://') || url.startsWith('edge://') || url.startsWith('about:') || url.startsWith('view-source:');
-}
-
-async function injectContentScript(tabId) {
-    try {
-        await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
-        return true;
-    } catch (e) {
-        console.warn('Falha ao injetar content.js:', e);
-        return false;
-    }
-}
-
 // Configurar event listeners
 function setupEventListeners() {
-    // Toggle de resumo automático
     document.getElementById('autoSummary').addEventListener('change', function() {
         saveSettings();
     });
-    
-    // Seletor de idioma
     document.getElementById('language').addEventListener('change', function() {
         saveSettings();
     });
-    
-    // Seletor de nível de detalhe
     document.getElementById('detailLevel').addEventListener('change', function() {
         saveSettings();
     });
-    
-    // Botão para gerar resumo agora
+    document.getElementById('provider').addEventListener('change', function(e) {
+        toggleOpenRouterKeyRow(e.target.value);
+        saveSettings();
+    });
+    document.getElementById('openrouterKey').addEventListener('change', function() {
+        saveSettings();
+    });
+
     document.getElementById('generateNow').addEventListener('click', function() {
         generateSummaryNow();
     });
-    
-    // Botão para ver histórico
     document.getElementById('viewHistory').addEventListener('click', function() {
         openHistoryWindow();
     });
@@ -113,7 +99,7 @@ function setupEventListeners() {
                     }
                     if (response && response.success) {
                         showToast('PDF enviado para resumo. Abra o Histórico para acompanhar.', 'success');
-                        // Não fechar automaticamente; instruir o usuário a abrir o histórico
+                        // Não fechar automaticamente; orientar o usuário
                     } else {
                         showToast(response?.error || 'Falha ao iniciar resumo do PDF', 'error');
                     }
@@ -132,7 +118,9 @@ function saveSettings() {
     const settings = {
         autoSummary: document.getElementById('autoSummary').checked,
         language: document.getElementById('language').value,
-        detailLevel: document.getElementById('detailLevel').value
+        detailLevel: document.getElementById('detailLevel').value,
+        provider: document.getElementById('provider').value,
+        openrouterKey: document.getElementById('openrouterKey').value
     };
     
     chrome.runtime.sendMessage({
@@ -146,6 +134,21 @@ function saveSettings() {
             showToast('Erro ao salvar configurações', 'error');
         }
     });
+}
+
+// Helper: URLs restritas
+function isRestrictedUrl(url) {
+    return url.startsWith('chrome://') || url.startsWith('chrome-extension://') || url.startsWith('edge://') || url.startsWith('about:') || url.startsWith('view-source:');
+}
+
+async function injectContentScript(tabId) {
+    try {
+        await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+        return true;
+    } catch (e) {
+        console.warn('Falha ao injetar content.js:', e);
+        return false;
+    }
 }
 
 // Gerar resumo manualmente com fallback de injeção
@@ -185,7 +188,6 @@ function generateSummaryNow() {
                 if (response && response.received) {
                     if (response.started) {
                         showToast('Resumo sendo gerado...', 'success');
-                        setTimeout(() => window.close(), 1200);
                     } else {
                         showToast(response.errorMessage || 'Conteúdo não suportado para extração direta', 'warning');
                     }
@@ -195,12 +197,10 @@ function generateSummaryNow() {
             });
         }
 
-        // Tenta enviar; se não houver receiver, injeta e pede para clicar de novo
         chrome.tabs.sendMessage(tab.id, { ping: true }, async function(response) {
             if (chrome.runtime.lastError || !response || !response.pong) {
                 const injected = await injectContentScript(tab.id);
                 if (injected) {
-                    // Tenta novamente automaticamente após injeção
                     setTimeout(() => {
                         chrome.tabs.sendMessage(tab.id, { ping: true }, function(resp2) {
                             if (!chrome.runtime.lastError && resp2 && resp2.pong) {
@@ -217,22 +217,18 @@ function generateSummaryNow() {
                 button.textContent = '🎯 Gerar Resumo Agora';
                 return;
             }
-            // Receiver existe, podemos enviar
             sendGenerate();
         });
     });
 }
 
-// Abrir janela de histórico
 function openHistoryWindow() {
     chrome.tabs.create({ url: chrome.runtime.getURL('history.html') });
 }
 
-// Atualizar indicador de status
 function updateStatusIndicator(isActive) {
     const statusDot = document.querySelector('.status-dot');
     const statusText = document.querySelector('.status-text');
-    
     if (isActive) {
         statusDot.classList.remove('inactive');
         statusDot.classList.add('active');
@@ -244,15 +240,12 @@ function updateStatusIndicator(isActive) {
     }
 }
 
-// Mostrar toast de notificação
 function showToast(message, type = 'success') {
     const container = document.getElementById('toast-container');
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.textContent = message;
-    
     container.appendChild(toast);
-    
     setTimeout(() => { toast.classList.add('show'); }, 100);
     setTimeout(() => {
         toast.classList.remove('show');
@@ -260,16 +253,8 @@ function showToast(message, type = 'success') {
     }, 3000);
 }
 
-// Capturar erros de runtime do Chrome
-chrome.runtime.onMessage.addListener(function(message) {
-    if (message.action === "showToast") {
-        showToast(message.text, message.type);
-    }
-});
-
-// Verificar se a extensão ainda está ativa quando o popup é aberto
 document.addEventListener('visibilitychange', function() {
     if (!document.hidden) {
-        loadSettings(); // Recarregar configurações quando o popup volta a ficar visível
+        loadSettings();
     }
 });
