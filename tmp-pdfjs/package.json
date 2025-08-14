@@ -1,0 +1,8 @@
+{
+  "name": "tmp-pdfjs-install",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "pdfjs-dist": "3.11.174"
+  }
+}
