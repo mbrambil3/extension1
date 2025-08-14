@@ -154,6 +154,8 @@ body {
     height: 20px;
     border-radius: 4px;
     background: #f0f0f0;
+    object-fit: cover;
+    display: inline-block;
 }
 
 .item-title {
