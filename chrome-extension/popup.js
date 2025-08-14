@@ -108,10 +108,18 @@ function generateSummaryNow() {
 function openHistoryWindow() { chrome.tabs.create({ url: chrome.runtime.getURL('history.html') }); }
 
 function updateStatusIndicator(isActive) {
-    const statusDot = document.querySelector('.status-dot');
-    const statusText = document.querySelector('.status-text');
-    if (isActive) { statusDot.classList.remove('inactive'); statusDot.classList.add('active'); statusText.firstChild && (statusText.firstChild.textContent = 'Extensão Ativa'); }
-    else { statusDot.classList.remove('active'); statusDot.classList.add('inactive'); statusText.firstChild && (statusText.firstChild.textContent = 'Extensão Inativa'); }
+    const statusDot = document.querySelector('.status-indicator .status-dot');
+    const statusText = document.querySelector('.status-indicator .status-text');
+    if (!statusDot || !statusText) return;
+    if (isActive) {
+        statusDot.classList.remove('inactive');
+        statusDot.classList.add('active');
+        statusText.textContent = 'Extensão Ativa';
+    } else {
+        statusDot.classList.remove('active');
+        statusDot.classList.add('inactive');
+        statusText.textContent = 'Extensão Inativa';
+    }
 }
 
 function showToast(message, type = 'success') {
