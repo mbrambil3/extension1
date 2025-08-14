@@ -74,8 +74,12 @@ function saveSettings() {
         openrouterKey: document.getElementById('openrouterKey').value
     };
     chrome.runtime.sendMessage({ action: "updateSettings", isActive: settings.autoSummary, settings }, (response) => {
-        if (response && response.success) { showToast('Configurações salvas!', 'success'); }
-        else { showToast('Erro ao salvar configurações', 'error'); }
+        if (response && response.success) {
+            updateStatusIndicator(response.isActive);
+            showToast('Configurações salvas!', 'success');
+        } else {
+            showToast('Erro ao salvar configurações', 'error');
+        }
     });
 }
 
