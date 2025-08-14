@@ -206,13 +206,16 @@ function renderHistory() {
 function createHistoryItemHTML(item) {
     const date = new Date(item.timestamp);
     const timeAgo = formatTimeAgo(date);
-    const favicon = item.favicon || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>';
+    const isPdf = item.url === 'arquivo-importado';
+    const favicon = isPdf
+        ? 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23ef4444"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm0 2l4 4h-4V4zM8 13h2.5a1.5 1.5 0 0 0 0-3H8v3zm0 1v3H7v-7h3.5a2.5 2.5 0 1 1 0 5H8zm7-1h-2v4h-1v-7h3a1.5 1.5 0 1 1 0 3zm-2-1h2a.5.5 0 1 0 0-1h-2v1z"/></svg>'
+        : (item.favicon || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>');
     const formatted = formatStructuredSummary(item.summary);
     
     return `
         <div class="history-item">
             <div class="item-header">
-                <img src="${favicon}" alt="" class="item-favicon" onerror="this.style.display='none'">
+                ${isPdf ? '<div class="item-favicon" style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;"><img src="' + favicon + '" alt="Documento" style="width:20px;height:20px;"/></div>' : '<img src="' + favicon + '" alt="Favicon" class="item-favicon" onerror="this.style.display=\'none\'">'}
                 <h3 class="item-title">${item.title}</h3>
             </div>
             
