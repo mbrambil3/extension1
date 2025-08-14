@@ -224,8 +224,8 @@ async function saveToHistory(originalText, summary, tab, options = {}) {
   try {
     const historyItem = {
       id: Date.now() + Math.random(),
-      title: tab?.title || 'Página sem título',
-      url: tab?.url || 'URL desconhecida',
+      title: (options?.inferredTitle) || tab?.title || 'Página sem título',
+      url: (options?.source === 'pdf') ? (tab?.url || 'arquivo-importado') : (tab?.url || 'URL desconhecida'),
       favicon: tab?.favIconUrl || null,
       originalText: originalText.substring(0, 500) + (originalText.length > 500 ? '...' : ''),
       summary: summary,
