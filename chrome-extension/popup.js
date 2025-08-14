@@ -45,9 +45,9 @@ function setupEventListeners() {
         generateSummaryNow();
     });
     
-    // Botão para testar conexão API
-    document.getElementById('testConnection').addEventListener('click', function() {
-        testAPIConnection();
+    // Botão para ver histórico
+    document.getElementById('viewHistory').addEventListener('click', function() {
+        openHistoryWindow();
     });
 }
 
