@@ -220,7 +220,7 @@ ${text.substring(0, 50000)}`; // Limitar texto para evitar exceder limites da AP
 }
 
 // Função para salvar resumo no histórico
-async function saveToHistory(originalText, summary, tab) {
+async function saveToHistory(originalText, summary, tab, options = {}) {
   try {
     const historyItem = {
       id: Date.now() + Math.random(),
