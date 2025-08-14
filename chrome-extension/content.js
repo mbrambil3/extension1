@@ -1,28 +1,47 @@
 // Content script para detectar e extrair conteúdo
 let sidePanelVisible = false;
 let extractedText = '';
+let isExtensionReady = false;
 
-// Verificar se a extensão deve funcionar automaticamente
-chrome.runtime.sendMessage({ action: "getSettings" }, (response) => {
-  if (response && response.isActive && response.settings.autoSummary) {
-    // Aguardar carregamento completo da página
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => {
-        setTimeout(detectAndExtractContent, 1000);
-      });
-    } else {
-      setTimeout(detectAndExtractContent, 1000);
-    }
-  }
+// Aguardar que a página carregue completamente
+window.addEventListener('load', () => {
+  setTimeout(initializeExtension, 2000);
 });
+
+// Inicializar extensão
+function initializeExtension() {
+  isExtensionReady = true;
+  // Verificar se a extensão deve funcionar automaticamente
+  chrome.runtime.sendMessage({ action: "getSettings" }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.log('Erro ao conectar com background script:', chrome.runtime.lastError);
+      return;
+    }
+    
+    if (response && response.isActive && response.settings.autoSummary) {
+      detectAndExtractContent();
+    }
+  });
+}
 
 // Escutar mensagens do background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('Mensagem recebida no content script:', message);
+  
   if (message.action === "generateSummary") {
+    if (!isExtensionReady) {
+      setTimeout(() => {
+        detectAndExtractContent(true);
+        sendResponse({ received: true });
+      }, 1000);
+      return true;
+    }
+    
     if (message.manual || !sidePanelVisible) {
       detectAndExtractContent(true);
     }
     sendResponse({ received: true });
+    return true;
   }
 });
 
