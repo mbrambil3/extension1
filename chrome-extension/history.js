@@ -206,7 +206,7 @@ function renderHistory() {
 function createHistoryItemHTML(item) {
     const date = new Date(item.timestamp);
     const timeAgo = formatTimeAgo(date);
-    const isPdf = item.url === 'arquivo-importado';
+    const isPdf = item.isPdf === true || item.url === 'arquivo-importado';
     const pdfIconHtml = '<span class="item-favicon" style="width:20px;height:20px;display:inline-block;line-height:0;">'
         + '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="#ef4444">'
         + '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm0 2l4 4h-4V4zM8 13h2.5a1.5 1.5 0 0 0 0-3H8v3zm0 1v3H7v-7h3.5a2.5 2.5 0 1 1 0 5H8zm7-1h-2v4h-1v-7h3a1.5 1.5 0 1 1 0 3zm-2-1h2a.5.5 0 1 0 0-1h-2v1z"/>'
