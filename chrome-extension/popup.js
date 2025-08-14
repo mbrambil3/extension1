@@ -112,40 +112,10 @@ function generateSummaryNow() {
     });
 }
 
-// Testar conexão com a API
-function testAPIConnection() {
-    const button = document.getElementById('testConnection');
-    button.classList.add('loading');
-    button.textContent = 'Testando...';
-    
-    // Texto de teste simples
-    const testText = 'Este é um teste de conexão com a API do Gemini para verificar se a extensão Auto-Summarizer está funcionando corretamente. Este texto contém informações suficientes para gerar um pequeno resumo de teste e validar a integração com a API.';
-    
-    console.log('Testando conexão API...');
-    
-    chrome.runtime.sendMessage({
-        action: "generateSummary",
-        text: testText
-    }, function(response) {
-        button.classList.remove('loading');
-        button.textContent = '🔗 Testar Conexão API';
-        
-        console.log('Resposta do teste de API:', response);
-        
-        if (chrome.runtime.lastError) {
-            console.error('Erro de runtime no teste:', chrome.runtime.lastError);
-            showToast('Erro de runtime: ' + chrome.runtime.lastError.message, 'error');
-            return;
-        }
-        
-        if (response && response.success) {
-            showToast('✅ Conexão OK! API funcionando', 'success');
-            console.log('Resumo de teste gerado:', response.summary);
-        } else {
-            const errorMsg = response?.error || 'Erro desconhecido';
-            console.error('Erro na API:', errorMsg);
-            showToast('❌ Erro na API: ' + errorMsg, 'error');
-        }
+// Abrir janela de histórico
+function openHistoryWindow() {
+    chrome.tabs.create({
+        url: chrome.runtime.getURL('history.html')
     });
 }
 
