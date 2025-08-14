@@ -20,7 +20,21 @@ function loadSettings() {
             updateStatusIndicator(response.isActive);
             // Atualiza indicador de status e provedor usado recentemente
             try {
-                await updateProviderDisplay();
+                const res = await chrome.storage.local.get('lastModelUsed');
+                const model = (res && res.lastModelUsed) ? String(res.lastModelUsed) : '';
+                let provider = '';
+                const lower = model.toLowerCase();
+                if (lower.includes('deepseek')) provider = 'Deepseek';
+                else if (lower.includes('llama')) provider = 'Llama';
+                else if (lower.includes('gpt')) provider = 'OpenAI';
+                else if (lower.includes('gemini') || lower.includes('google')) provider = 'Gemini';
+                else if (lower.includes('qwen')) provider = 'Qwen';
+                else if (model.trim()) provider = 'Fallback';
+                const footer = document.getElementById('providerDisplay');
+                if (footer) {
+                    if (provider) footer.textContent = `Powered by ${provider}`;
+                    else footer.textContent = 'Powered by Deepseek';
+                }
             } catch (e) {}
         }
     });
