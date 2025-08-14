@@ -46,6 +46,12 @@ function quickCanStartExtraction() {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('Mensagem recebida no content script:', message);
   
+  // Responder ping para o popup detectar que há content script nesta aba
+  if (message && message.ping) {
+    sendResponse({ pong: true });
+    return true;
+  }
+  
   if (message.action === "generateSummary") {
     if (!isExtensionReady) {
       setTimeout(() => {
