@@ -64,7 +64,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Função para gerar resumo usando Gemini API
 async function generateSummaryWithGemini(text, settings) {
   const API_KEY = 'AIzaSyCGqaKkd1NKGfo9aygrx92ecIjy8nqlk0c';
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${API_KEY}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
   
   // Configurar prompt baseado nas configurações
   let detailPrompt = '';
@@ -83,9 +83,10 @@ async function generateSummaryWithGemini(text, settings) {
   const prompt = `${detailPrompt} do seguinte texto em ${settings.language === 'pt' ? 'português' : 'inglês'}. 
 Organize os pontos principais de forma clara e estruturada:
 
-${text.substring(0, 30000)}`; // Limitar texto para evitar exceder limites da API
+${text.substring(0, 50000)}`; // Limitar texto para evitar exceder limites da API
   
   try {
+    console.log('Fazendo chamada para API Gemini...');
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -102,15 +103,38 @@ ${text.substring(0, 30000)}`; // Limitar texto para evitar exceder limites da AP
           topK: 40,
           topP: 0.95,
           maxOutputTokens: 1024,
-        }
+        },
+        safetySettings: [
+          {
+            category: "HARM_CATEGORY_HARASSMENT",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          },
+          {
+            category: "HARM_CATEGORY_HATE_SPEECH",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          },
+          {
+            category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          },
+          {
+            category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          }
+        ]
       })
     });
     
+    console.log('Resposta da API:', response.status);
+    
     if (!response.ok) {
-      throw new Error(`Erro na API: ${response.status}`);
+      const errorData = await response.text();
+      console.error('Erro da API:', errorData);
+      throw new Error(`Erro na API: ${response.status} - ${errorData}`);
     }
     
     const data = await response.json();
+    console.log('Dados recebidos:', data);
     
     if (data.candidates && data.candidates[0] && data.candidates[0].content) {
       return data.candidates[0].content.parts[0].text;
