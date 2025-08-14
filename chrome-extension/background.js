@@ -45,22 +45,32 @@ chrome.commands.onCommand.addListener((command) => {
 // Gerenciar mensagens entre scripts
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "getSettings") {
-    sendResponse({ 
-      isActive: isExtensionActive,
-      settings: summarySettings 
+    // Sempre retorne o estado real carregado do storage
+    loadSettingsFromStorage(() => {
+      sendResponse({ 
+        isActive: isExtensionActive,
+        settings: summarySettings 
+      });
     });
+    return true;
   }
   
   if (message.action === "updateSettings") {
-    isExtensionActive = message.isActive;
-    summarySettings = { ...summarySettings, ...message.settings };
+    if (typeof message.isActive === 'boolean') {
+      isExtensionActive = message.isActive;
+    }
+    if (message.settings && typeof message.settings === 'object') {
+      summarySettings = { ...summarySettings, ...message.settings };
+    }
     
     chrome.storage.sync.set({
       extensionActive: isExtensionActive,
       summarySettings: summarySettings
+    }, () => {
+      // Garantir consistência ao responder
+      sendResponse({ success: true, isActive: isExtensionActive, settings: summarySettings });
     });
-    
-    sendResponse({ success: true });
+    return true;
   }
   
   if (message.action === "generateSummary") {
