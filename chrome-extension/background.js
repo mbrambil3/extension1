@@ -113,8 +113,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await saveToCache(key, { title: title || null, summary, model: modelUsed, timestamp: Date.now(), source: fromPdf ? 'pdf' : 'web' });
         await chrome.storage.local.set({ lastModelUsed: modelUsed });
 
-        if (fromPdf) { await saveToHistory(message.text, summary, sender.tab, { inferredTitle: title || fileName, source: 'pdf' }); sendResponse({ success: true, summary, title: title || fileName, modelUsed }); }
-        else { await saveToHistory(message.text, summary, sender.tab); sendResponse({ success: true, summary, title: sender?.tab?.title || 'Página', modelUsed }); }
+        const extra = { persona: (summarySettings.persona||'assertivo') };
+        if (fromPdf) { await saveToHistory(message.text, summary, sender.tab, { inferredTitle: title || fileName, source: 'pdf', ...extra }); sendResponse({ success: true, summary, title: title || fileName, modelUsed }); }
+        else { await saveToHistory(message.text, summary, sender.tab, extra); sendResponse({ success: true, summary, title: sender?.tab?.title || 'Página', modelUsed }); }
       } catch (error) {
         const msg = (error && error.message) ? error.message : 'Falha ao acessar o serviço de IA';
         const status = (error && error.status) ? String(error.status) : (msg.match(/\b(\d{3})\b/) || [])[1];
