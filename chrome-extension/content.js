@@ -111,6 +111,13 @@ function showLoadingPanel() {
     </div>
   `;
   showPanel();
+  try {
+    document.getElementById('stop-autosummary')?.addEventListener('click', () => {
+      try { chrome.runtime.sendMessage({ action: 'stopGeneration' }, () => {}); } catch (e) {}
+      hidePanel();
+      showToast('Geração interrompida');
+    });
+  } catch (e) {}
 }
 
 function showSummaryPanel(summary, modelUsed) {
