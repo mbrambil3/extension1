@@ -18,8 +18,9 @@ function quickCanStartExtraction() {
   const isPdfUrl = /\.pdf($|\?|#)/i.test(url);
   const hasPdfEmbed = document.querySelector('embed[type="application/pdf"], object[type="application/pdf"]');
   if (isPdfUrl || hasPdfEmbed) {
+    // Não exibir painel de erro para PDFs no viewer nativo; o fluxo deve ser pelo popup
     if (window.PDFViewerApplication && window.PDFViewerApplication.pdfDocument) { return { canStart: true }; }
-    return { canStart: false, reason: 'PDF no visualizador nativo do Chrome não permite extração direta. Use Importar PDF no popup.' };
+    return { canStart: false, reason: 'PDF detectado. Use o botão "Gerar Resumo Agora" no popup.' };
   }
   return { canStart: true };
 }
@@ -27,9 +28,22 @@ function quickCanStartExtraction() {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message && message.ping) { sendResponse({ pong: true }); return true; }
   if (message.action === "generateSummary") {
-    if (!isExtensionReady) { setTimeout(() => { const check = quickCanStartExtraction(); if (!check.canStart) { showErrorPanel(check.reason); sendResponse({ received: true, started: false, errorMessage: check.reason }); } else { detectAndExtractContent(true); sendResponse({ received: true, started: true }); } }, 1000); return true; }
+    if (!isExtensionReady) {
+      setTimeout(() => {
+        const check = quickCanStartExtraction();
+        if (!check.canStart) {
+          // Não abrir painel de erro para PDFs; apenas responder
+          sendResponse({ received: true, started: false, errorMessage: check.reason });
+        } else { detectAndExtractContent(true); sendResponse({ received: true, started: true }); }
+      }, 1000);
+      return true;
+    }
     const check = quickCanStartExtraction();
-    if (!check.canStart) { showErrorPanel(check.reason); sendResponse({ received: true, started: false, errorMessage: check.reason }); return true; }
+    if (!check.canStart) {
+      // Não abrir painel de erro; apenas responder com orientação
+      sendResponse({ received: true, started: false, errorMessage: check.reason });
+      return true;
+    }
     if (message.manual || !sidePanelVisible) { detectAndExtractContent(true); }
     sendResponse({ received: true, started: true });
     return true;
@@ -49,7 +63,10 @@ async function extractPDFContent(forceGenerate = false) {
       for (let i = 1; i <= Math.min(pdfDoc.numPages, 10); i++) { const page = await pdfDoc.getPage(i); const textContent = await page.getTextContent(); const pageText = textContent.items.map(item => item.str).join(' '); fullText += pageText + '\n'; }
       if (fullText.length > 500) { extractedText = fullText; if (forceGenerate || shouldAutoSummarize(fullText)) { generateSummary(fullText); } }
       else { showErrorPanel('Não foi possível extrair texto suficiente do PDF.'); }
-    } else { showErrorPanel('Este PDF parece estar no visualizador nativo. Use Importar PDF no popup.'); }
+    } else {
+      // Não mostrar painel de erro para viewer nativo
+      console.log('PDF no viewer nativo detectado. Use o popup para resumir.');
+    }
   } catch (error) { console.error('Erro ao extrair PDF:', error); showErrorPanel('Erro ao extrair conteúdo do PDF.'); }
 }
 
@@ -126,7 +143,6 @@ function showSummaryPanel(summary, modelUsed) {
   const panel = document.getElementById('auto-summarizer-panel');
   const content = panel.querySelector('.panel-content');
   const formatted = formatStructuredSummary(summary);
-  // Reduzir o nome do modelo para rótulo curto
   let modelShort = '';
   try {
     const low = String(modelUsed || '').toLowerCase();
@@ -136,7 +152,6 @@ function showSummaryPanel(summary, modelUsed) {
     else if (low.includes('gpt')) modelShort = 'OpenAI';
     else if (low.includes('qwen')) modelShort = 'Qwen';
   } catch (e) {}
-  // Acrescentar variação (r1, etc.) e se é free
   let modelVariant = '';
   let isFree = '';
   try {
@@ -145,7 +160,6 @@ function showSummaryPanel(summary, modelUsed) {
     if (/free/i.test(raw)) isFree = ' (free)';
   } catch (e) {}
   const modelInfo = modelShort ? ` • Modelo: ${escapeHtml(modelShort + modelVariant + isFree)}` : '';
-  // Persona atual
   let personaTxt = '';
   try {
     const p = (window.__autoSummPersona || '').trim();

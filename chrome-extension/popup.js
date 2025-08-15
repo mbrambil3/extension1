@@ -30,6 +30,27 @@ function renderPlanStatus(status) {
     el.textContent = txt;
 }
 
+function updatePremiumUI(status) {
+    const isPremium = status && status.success && (status.plan === 'premium' || status.plan === 'premium_unlimited');
+    const applyBtn = document.getElementById('applyKeyBtn');
+    const keyInput = document.getElementById('subscriptionKey');
+    const hint = document.getElementById('subscriptionHint');
+    if (!applyBtn || !keyInput || !hint) return;
+    if (isPremium) {
+        applyBtn.textContent = 'Premium ATIVADO';
+        applyBtn.disabled = true;
+        applyBtn.classList.add('disabled');
+        keyInput.style.display = 'none';
+        hint.style.display = 'none';
+    } else {
+        applyBtn.textContent = 'Ativar Premium';
+        applyBtn.disabled = false;
+        applyBtn.classList.remove('disabled');
+        keyInput.style.display = 'block';
+        hint.style.display = 'block';
+    }
+}
+
 function loadSettings() {
     chrome.runtime.sendMessage({ action: "getSettings" }, async (response) => {
         if (response) {
@@ -55,6 +76,7 @@ function loadSettings() {
         }
         const quota = await loadQuotaStatus();
         renderPlanStatus(quota);
+        updatePremiumUI(quota);
     });
 }
 
@@ -77,6 +99,7 @@ function saveSettingsInternal(showToastFlag) {
         if (showToastFlag) showToast('Configurações salvas!', 'success');
         const quota = await loadQuotaStatus();
         renderPlanStatus(quota);
+        updatePremiumUI(quota);
     });
 }
 
@@ -102,8 +125,9 @@ function setupEventListeners() {
             if (!resp || !resp.success) { showToast(resp?.error || 'Falha ao aplicar KEY', 'error'); return; }
             const quota = await loadQuotaStatus();
             renderPlanStatus(quota);
+            updatePremiumUI(quota);
             showToast('Premium ativado com sucesso!', 'success');
-            // Mantém a KEY visível no campo conforme solicitado
+            // Mantém a KEY à mostra somente se ainda não estiver premium (para correções), senão escondida por updatePremiumUI()
         });
     });
 
@@ -247,7 +271,12 @@ function generateSummaryNow() {
                     else { showToast(response?.error || 'Falha ao gerar resumo do PDF', 'error'); }
                 });
                 return;
-            } catch (e) { /* segue fluxo normal abaixo */ }
+            } catch (e) {
+                // Não cair no fluxo de content.js; mostrar erro direto
+                button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; if (stopBtn) stopBtn.style.display = 'none';
+                showToast('Falha ao processar PDF. Tente importar o arquivo pelo popup.', 'error');
+                return;
+            }
         }
 
         if (isRestrictedUrl(tab.url || '')) { button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; showToast('Esta página não permite injeção de conteúdo (chrome://, etc.)', 'warning'); return; }

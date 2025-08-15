@@ -50,11 +50,11 @@
                 <div class="setting-item" style="border-top:1px solid #e2e8f0; margin-top:8px; padding-top:8px;">
                     <label class="setting-label">Plano e Limites</label>
                     <div id="planStatus" class="setting-description">Plano: Free • Hoje: 0/30</div>
-                    <div style="display:flex; gap:8px; margin-top:6px;">
+                    <div style="display:flex; gap:8px; margin-top:6px; align-items:center;">
                         <button id="applyKeyBtn" class="secondary-btn" style="flex:0 0 auto;">Ativar Premium</button>
                     </div>
                     <input id="subscriptionKey" type="text" class="setting-select" placeholder="KEY de ASSINATURA (ex.: MASTER-UNLIMITED-0001)" style="width:100%; margin-top:8px; height:38px; border-radius:8px;" />
-                    <small class="setting-description">Insira sua KEY para liberar Premium por 30 dias. Master Key libera ilimitado.</small>
+                    <small id="subscriptionHint" class="setting-description" style="display:block; margin-left:0;">Insira sua KEY para liberar Premium por 30 dias.</small>
                 </div>
 
                 <details id="advancedOptions">
