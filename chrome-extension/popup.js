@@ -50,6 +50,16 @@ function setupEventListeners() {
     document.getElementById('generateNow').addEventListener('click', generateSummaryNow);
     document.getElementById('viewHistory').addEventListener('click', openHistoryWindow);
 
+    const stopBtn = document.getElementById('stopNow');
+    if (stopBtn) {
+        stopBtn.addEventListener('click', () => {
+            chrome.runtime.sendMessage({ action: 'stopGeneration' }, (resp) => {
+                showToast('Geração interrompida', 'warning');
+                stopBtn.style.display = 'none';
+            });
+        });
+    }
+
     document.getElementById('pdfInput').addEventListener('change', async function(e) {
         const file = e.target.files && e.target.files[0];
         if (!file) return;
