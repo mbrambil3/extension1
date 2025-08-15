@@ -58,9 +58,14 @@
             </div>
             
             <div class="action-group">
-                <button id="generateNow" class="primary-btn">
-                    🎯 Gerar Resumo Agora
-                </button>
+                <div style="display:flex; gap:8px;">
+                  <button id="generateNow" class="primary-btn" style="flex:1;">
+                      🎯 Gerar Resumo Agora
+                  </button>
+                  <button id="stopNow" class="secondary-btn" style="flex:1; display:none;">
+                      ⏹️ Parar
+                  </button>
+                </div>
                 
                 <button id="viewHistory" class="secondary-btn">
                     📚 Ver Histórico
