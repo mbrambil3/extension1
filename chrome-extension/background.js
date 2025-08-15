@@ -124,15 +124,14 @@ class DeviceStateManager {
       st = await this.loadFromBookmarks();
     }
 
-    // 3) Importa legado do local (se existir) somente primeira vez
+    // 3) Importa legado do local (somente contagem) para primeira vez (NÃO importa premium antigo)
     if (!st) {
-      const localRes = await prom((cb) => chrome.storage.local.get(['dailyUsage', 'premium'], cb));
+      const localRes = await prom((cb) => chrome.storage.local.get(['dailyUsage'], cb));
       const d = localRes?.dailyUsage;
-      const p = localRes?.premium;
       const deviceId = await sha256Hex(buildFingerprintString());
       st = {
         deviceId,
-        premium: p || { until: null, unlimited: false, keyMasked: null },
+        premium: { until: null, unlimited: false, keyMasked: null },
         dailyUsage: d || { date: todayStr(), count: 0 }
       };
     }
