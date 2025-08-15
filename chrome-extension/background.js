@@ -166,7 +166,12 @@ async function orWithFallback(messages) {
         }
       }
     }
-    throw e;
+    // Tentar DeepSeek como último recurso (inclui casos 401 também)
+    try {
+      return await deepseekRequest(messages);
+    } catch (dsErr) {
+      throw dsErr;
+    }
   }
 }
 
