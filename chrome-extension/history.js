@@ -226,7 +226,7 @@ function createHistoryItemHTML(item) {
             <div class="item-meta">
                 <div class="meta-item">
                     <span>🎭</span>
-                    <span>${escapeHtml(item.persona || 'assertivo')}</span>
+                    <span>${escapeHtml(item.persona || 'Padrão')}</span>
                 </div>
                 <div class="meta-item">
                     <span>🕒</span>

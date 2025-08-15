@@ -4,7 +4,7 @@ let summarySettings = {
   autoSummary: true,
   language: 'pt',
   detailLevel: 'medium',
-  persona: 'assertivo',
+  persona: '',
   openrouterKey: ''
 };
 
@@ -40,7 +40,7 @@ function loadSettingsFromStorage(callback) {
   chrome.storage.sync.get(['extensionActive', 'summarySettings'], (result) => {
     if (result && typeof result.extensionActive !== 'undefined') isExtensionActive = result.extensionActive;
     if (result && result.summarySettings) summarySettings = { ...summarySettings, ...result.summarySettings };
-    if (typeof callback === 'function') callback({ isExtensionActive, summarySettings });
+    if (typeof callback === 'function') callback({ isActive: isExtensionActive, summarySettings });
   });
 }
 
@@ -86,13 +86,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       try {
         const cooldown = await getCooldown();
         if (cooldown > Date.now()) { const secs = Math.ceil((cooldown - Date.now()) / 1000); sendResponse({ success: false, error: `Serviço temporariamente indisponível. Aguarde ${secs}s.` }); return; }
-        const settingsKey = JSON.stringify({ persona: (summarySettings.persona||'assertivo'), language: summarySettings.language, detail: summarySettings.detailLevel });
+        const personaKey = (summarySettings.persona || '').trim();
+        const settingsKey = JSON.stringify({ persona: personaKey, language: summarySettings.language, detail: summarySettings.detailLevel });
         const key = contentHash(settingsKey + '|' + message.text);
         const cached = await getFromCache(key);
         if (cached && (Date.now() - cached.timestamp) < CACHE_TTL_MS) {
           await chrome.storage.local.set({ lastModelUsed: cached.model || 'cache' });
-          if (fromPdf) { await saveToHistory(message.text, cached.summary, sender.tab, { inferredTitle: cached.title || fileName, source: 'pdf' }); sendResponse({ success: true, summary: cached.summary, title: cached.title || fileName, modelUsed: cached.model || 'cache' }); }
-          else { await saveToHistory(message.text, cached.summary, sender.tab); sendResponse({ success: true, summary: cached.summary, title: sender?.tab?.title || 'Página', modelUsed: cached.model || 'cache' }); }
+          if (fromPdf) { await saveToHistory(message.text, cached.summary, sender.tab, { inferredTitle: cached.title || fileName, source: 'pdf', persona: personaKey }); sendResponse({ success: true, summary: cached.summary, title: cached.title || fileName, modelUsed: cached.model || 'cache' }); }
+          else { await saveToHistory(message.text, cached.summary, sender.tab, { persona: personaKey }); sendResponse({ success: true, summary: cached.summary, title: sender?.tab?.title || 'Página', modelUsed: cached.model || 'cache' }); }
           return;
         }
 
@@ -113,7 +114,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await saveToCache(key, { title: title || null, summary, model: modelUsed, timestamp: Date.now(), source: fromPdf ? 'pdf' : 'web' });
         await chrome.storage.local.set({ lastModelUsed: modelUsed });
 
-        const extra = { persona: (summarySettings.persona||'assertivo') };
+        const extra = { persona: (summarySettings.persona || '').trim() };
         if (fromPdf) { await saveToHistory(message.text, summary, sender.tab, { inferredTitle: title || fileName, source: 'pdf', ...extra }); sendResponse({ success: true, summary, title: title || fileName, modelUsed }); }
         else { await saveToHistory(message.text, summary, sender.tab, extra); sendResponse({ success: true, summary, title: sender?.tab?.title || 'Página', modelUsed }); }
       } catch (error) {
@@ -202,8 +203,9 @@ function buildSummaryInstructions(text) {
     case 'medium': detailPrompt = 'Crie um resumo conciso com os pontos principais (5-7 pontos)'; break;
     case 'long': detailPrompt = 'Crie um resumo detalhado e abrangente'; break;
   }
-  const persona = (summarySettings.persona || 'assertivo').trim();
-  return `${detailPrompt} do seguinte texto em ${summarySettings.language === 'pt' ? 'português' : 'inglês'}, com tom ${persona}.
+  const persona = (summarySettings.persona || '').trim();
+  const styleLine = persona ? `Adote exatamente o seguinte estilo de escrita/persona ao responder (sem quebrar as regras de formatação): ${persona}.` : '';
+  return `${detailPrompt} do seguinte texto em ${summarySettings.language === 'pt' ? 'português' : 'inglês'}.${styleLine ? `\n${styleLine}` : ''}
 
 Regras de formatação (siga exatamente):
 1) Produza de 3 a 8 pontos principais como lista numerada (1., 2., 3., ...)
@@ -222,7 +224,9 @@ async function generateSummaryOR(text) {
 }
 
 async function generatePdfTitleAndSummaryOR(text) {
-  const prompt = `Você receberá o conteúdo textual de um arquivo PDF. Gere:\n- TITLE: um título curto (no máximo 10 palavras), sem aspas/markdown\n- SUMMARY: um resumo estruturado conforme regras abaixo\n\nRegras do SUMMARY (siga exatamente):\n1) 3 a 8 itens numerados (1., 2., ...)\n2) Cada item: um tópico curto (3–8 palavras) seguido de dois pontos e uma frase breve\n3) Subitens opcionais iniciados com \"- \" (1–3)\n\nResponda estritamente neste formato:\nTITLE: <título curto>\nSUMMARY:\n1. <tópico curto>: <frase>\n- <subitem opcional>\n2. ...\n\nConteúdo (parcial):\n${text.substring(0, 50000)}`;
+  const persona = (summarySettings.persona || '').trim();
+  const styleLine = persona ? `\nInstrua-se a escrever exatamente no seguinte estilo/persona (sem quebrar as regras de formatação): ${persona}.` : '';
+  const prompt = `Você receberá o conteúdo textual de um arquivo PDF. Gere:\n- TITLE: um título curto (no máximo 10 palavras), sem aspas/markdown\n- SUMMARY: um resumo estruturado conforme regras abaixo${styleLine}\n\nRegras do SUMMARY (siga exatamente):\n1) 3 a 8 itens numerados (1., 2., ...)\n2) Cada item: um tópico curto (3–8 palavras) seguido de dois pontos e uma frase breve\n3) Subitens opcionais iniciados com "- " (1–3)\n\nResponda estritamente neste formato:\nTITLE: <título curto>\nSUMMARY:\n1. <tópico curto>: <frase>\n- <subitem opcional>\n2. ...\n\nConteúdo (parcial):\n${text.substring(0, 50000)}`;
   const messages = [ { role: 'user', content: prompt } ];
   const { text: out, model } = await orWithFallback(messages);
   let title = null, summary = null;
@@ -243,7 +247,7 @@ async function setCooldown(ms) { const until = Date.now() + (ms || 20000); await
 
 async function saveToHistory(originalText, summary, tab, options = {}) {
   try {
-    const historyItem = { id: Date.now() + Math.random(), title: (options?.inferredTitle) || tab?.title || 'Página sem título', url: (options?.source === 'pdf') ? (tab?.url || 'arquivo-importado') : (tab?.url || 'URL desconhecida'), favicon: (tab?.favIconUrl && String(tab.favIconUrl).trim()) ? tab.favIconUrl : null, isPdf: options?.source === 'pdf', source: options?.source || 'web', persona: options?.persona || 'assertivo', originalText: originalText.substring(0, 500) + (originalText.length > 500 ? '...' : ''), summary: summary, timestamp: new Date().toISOString(), wordCount: originalText.split(' ').length };
+    const historyItem = { id: Date.now() + Math.random(), title: (options?.inferredTitle) || tab?.title || 'Página sem título', url: (options?.source === 'pdf') ? (tab?.url || 'arquivo-importado') : (tab?.url || 'URL desconhecida'), favicon: (tab?.favIconUrl && String(tab.favIconUrl).trim()) ? tab.favIconUrl : null, isPdf: options?.source === 'pdf', source: options?.source || 'web', persona: options?.persona || '', originalText: originalText.substring(0, 500) + (originalText.length > 500 ? '...' : ''), summary: summary, timestamp: new Date().toISOString(), wordCount: originalText.split(' ').length };
     const result = await chrome.storage.local.get('summaryHistory'); const history = result.summaryHistory || []; history.unshift(historyItem); const limitedHistory = history.slice(0, 50); await chrome.storage.local.set({ summaryHistory: limitedHistory });
   } catch (error) { console.error('Erro ao salvar no histórico:', error); }
 }
