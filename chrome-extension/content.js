@@ -124,7 +124,17 @@ function showSummaryPanel(summary, modelUsed) {
   const panel = document.getElementById('auto-summarizer-panel');
   const content = panel.querySelector('.panel-content');
   const formatted = formatStructuredSummary(summary);
-  const modelInfo = modelUsed ? ` • Modelo: ${escapeHtml(modelUsed)}` : '';
+  // Reduzir o nome do modelo para rótulo curto
+  let modelShort = '';
+  try {
+    const low = String(modelUsed || '').toLowerCase();
+    if (low.includes('deepseek')) modelShort = 'Deepseek';
+    else if (low.includes('llama')) modelShort = 'Llama';
+    else if (low.includes('gemini') || low.includes('google')) modelShort = 'Gemini';
+    else if (low.includes('gpt')) modelShort = 'OpenAI';
+    else if (low.includes('qwen')) modelShort = 'Qwen';
+  } catch (e) {}
+  const modelInfo = modelShort ? ` • Modelo: ${escapeHtml(modelShort)}` : '';
   content.innerHTML = `
     <div class="summary-header">
       <h3>📄 Resumo Gerado</h3>
