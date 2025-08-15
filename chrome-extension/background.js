@@ -169,7 +169,8 @@ function buildSummaryInstructions(text) {
     case 'medium': detailPrompt = 'Crie um resumo conciso com os pontos principais (5-7 pontos)'; break;
     case 'long': detailPrompt = 'Crie um resumo detalhado e abrangente'; break;
   }
-  return `${detailPrompt} do seguinte texto em ${summarySettings.language === 'pt' ? 'português' : 'inglês'}.
+  const persona = (summarySettings.persona || 'assertivo').trim();
+  return `${detailPrompt} do seguinte texto em ${summarySettings.language === 'pt' ? 'português' : 'inglês'}, com tom ${persona}.
 
 Regras de formatação (siga exatamente):
 1) Produza de 3 a 8 pontos principais como lista numerada (1., 2., 3., ...)
