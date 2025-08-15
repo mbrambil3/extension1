@@ -143,6 +143,13 @@ function showSummaryPanel(summary, modelUsed) {
     if (/free/i.test(raw)) isFree = ' (free)';
   } catch (e) {}
   const modelInfo = modelShort ? ` • Modelo: ${escapeHtml(modelShort + modelVariant + isFree)}` : '';
+  // Persona atual
+  let personaTxt = '';
+  try {
+    const p = (window.__autoSummPersona || '').trim();
+    if (p) personaTxt = ` • Tom: ${escapeHtml(p)}`;
+  } catch (e) {}
+
   content.innerHTML = `
     <div class="summary-header">
       <h3>📄 Resumo Gerado</h3>
