@@ -74,6 +74,8 @@ function generateSummary(text) {
   showLoadingPanel();
   try { window.__autoSummAbortController?.abort?.(); } catch (e) {}
   window.__autoSummAbortController = new AbortController();
+  // Ler persona atual para exibir no rodapé
+  try { chrome.runtime.sendMessage({ action: 'getSettings' }, (resp) => { window.__autoSummPersona = resp?.settings?.persona || 'assertivo'; }); } catch (e) {}
   chrome.runtime.sendMessage({ action: "generateSummary", text: text }, (response) => {
     if (chrome.runtime.lastError) { showErrorPanel('Erro de comunicação: ' + chrome.runtime.lastError.message); return; }
     if (response && response.success) { showSummaryPanel(response.summary, response.modelUsed); }
