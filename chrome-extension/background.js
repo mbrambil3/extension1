@@ -150,13 +150,13 @@ async function orRequest(messages, model) {
 
 async function deepseekRequest(messages) {
   const headers = { 'Authorization': `Bearer ${DEEPSEEK_API_KEY}`, 'Content-Type': 'application/json' };
-  const body = JSON.stringify({ model: 'deepseek-chat', messages, temperature: 0.7, max_tokens: 1024 });
-  const resp = await fetch(DS_URL, { method: 'POST', headers, body });
+  const body = JSON.stringify({ model: 'deepseek-r1', messages, temperature: 0.7, max_tokens: 1024 });
+  const resp = await fetch(DS_URL, { method: 'POST', headers, body, signal: currentAbortController?.signal });
   if (!resp.ok) { const detail = await resp.text(); const err = new Error(`DeepSeek API error: ${resp.status} - ${detail}`); err.status = resp.status; throw err; }
   const data = await resp.json();
   const out = data?.choices?.[0]?.message?.content;
   if (!out) throw new Error('Resposta inválida do DeepSeek');
-  return { text: out, model: 'deepseek-chat' };
+  return { text: out, model: 'deepseek/deepseek-r1' };
 }
 
 async function orWithFallback(messages) {
