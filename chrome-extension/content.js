@@ -162,7 +162,7 @@ function showSummaryPanel(summary, modelUsed) {
       <div class="summary-text">${formatted}</div>
     </div>
     <div class="summary-footer">
-      <small>Resumo gerado por IA${modelInfo} • Auto-Summarizer</small>
+      <small>Resumo gerado por IA${modelInfo}${personaTxt}</small>
     </div>
   `;
   document.getElementById('copy-summary').addEventListener('click', () => { navigator.clipboard.writeText(summary).then(() => { showToast('Resumo copiado!'); }); });
