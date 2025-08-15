@@ -90,6 +90,7 @@ function saveSettingsInternal(showToastFlag) {
         language: document.getElementById('language').value,
         detailLevel: document.getElementById('detailLevel').value,
         openrouterKey: document.getElementById('openrouterKey').value,
+        deepseekKey: (document.getElementById('deepseekKey')?.value || ''),
         persona: document.getElementById('persona').value.trim()
     };
     chrome.runtime.sendMessage({ action: "updateSettings", isActive: settings.autoSummary, settings }, async (response) => {
