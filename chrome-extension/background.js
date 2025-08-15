@@ -137,6 +137,7 @@ async function orRequest(messages, model) {
 }
 
 async function orWithFallback(messages) {
+  currentAbortController = new AbortController();
   const shouldFallback = (err) => {
     if (!err) return true;
     const s = err.status;
