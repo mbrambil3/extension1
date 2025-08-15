@@ -202,12 +202,11 @@ class DeviceStateManager {
     const norm = key.toUpperCase();
     if (norm === MASTER_KEY.toUpperCase()) {
       this.state.premium = { unlimited: true, until: null, keyMasked: this.maskKey(key) };
-    } else {
-      const until = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-      this.state.premium = { unlimited: false, until: until.toISOString(), keyMasked: this.maskKey(key) };
+      await this.persist();
+      return { ok: true, plan: 'premium_unlimited', premiumUntil: null };
     }
-    await this.persist();
-    return { ok: true, plan: this.state.premium.unlimited ? 'premium_unlimited' : 'premium', premiumUntil: this.state.premium.until || null };
+    // NO MORE trial/30 days for random keys. Anything else is invalid.
+    return { ok: false, error: 'KEY inválida' };
   }
 
   maskKey(k) {
