@@ -8,9 +8,8 @@ let summarySettings = {
   openrouterKey: ''
 };
 
-// DeepSeek fallback (direto, sem OpenRouter)
-const DEEPSEEK_API_KEY = 'sk-69684eabfdb14af991e944c2472ad0b8';
-const DS_URL = 'https://api.deepseek.com/chat/completions';
+// Removido DeepSeek fallback direto por padrão
+// Caso deseje reativar no futuro, adicionar opção de usuário e chave dedicada.
 
 // Controlador para permitir cancelar a geração em andamento
 let currentAbortController = null;
@@ -150,23 +149,13 @@ async function orRequest(messages, model) {
   return { text: out, model };
 }
 
-async function deepseekRequest(messages) {
-  const headers = { 'Authorization': `Bearer ${DEEPSEEK_API_KEY}`, 'Content-Type': 'application/json' };
-  const body = JSON.stringify({ model: 'deepseek-r1', messages, temperature: 0.7, max_tokens: 1024 });
-  const resp = await fetch(DS_URL, { method: 'POST', headers, body, signal: currentAbortController?.signal });
-  if (!resp.ok) { const detail = await resp.text(); const err = new Error(`DeepSeek API error: ${resp.status} - ${detail}`); err.status = resp.status; throw err; }
-  const data = await resp.json();
-  const out = data?.choices?.[0]?.message?.content;
-  if (!out) throw new Error('Resposta inválida do DeepSeek');
-  return { text: out, model: 'deepseek/deepseek-r1' };
-}
-
 async function orWithFallback(messages) {
   currentAbortController = new AbortController();
   const shouldFallback = (err) => {
     if (!err) return true;
     const s = err.status;
     const msg = String(err.message || '').toLowerCase();
+    if (s === 401 || s === 403) return false; // não usar fallback para credenciais inválidas
     if (s === 429 || s === 503) return true; // limite/indisponível
     if (typeof s === 'number' && s >= 500) return true; // outros 5xx
     if (!s) return true; // erros de rede/fetch
@@ -177,13 +166,13 @@ async function orWithFallback(messages) {
   try {
     return await orRequest(messages, PRIMARY_MODEL);
   } catch (e) {
-    if (!shouldFallback(e) && e?.status !== 401) throw e; // se 401, ainda vamos tentar DeepSeek
+    if (!shouldFallback(e)) throw e;
     if (e && (e.status === 429 || e.status === 503)) await setCooldown(20000);
     for (const m of FALLBACK_MODELS) {
       try {
         return await orRequest(messages, m);
       } catch (err) {
-        if (shouldFallback(err) || err?.status === 401) {
+        if (shouldFallback(err)) {
           if (err && (err.status === 429 || err.status === 503)) await setCooldown(20000);
           continue;
         } else {
@@ -191,8 +180,8 @@ async function orWithFallback(messages) {
         }
       }
     }
-    // OpenRouter esgotou: acionar DeepSeek como último fallback
-    return await deepseekRequest(messages);
+    // Todos os modelos do OpenRouter falharam
+    throw new Error('Serviço temporariamente indisponível após múltiplas tentativas. Tente novamente em instantes.');
   }
 }
 
@@ -204,7 +193,7 @@ function buildSummaryInstructions(text) {
     case 'long': detailPrompt = 'Crie um resumo detalhado e abrangente'; break;
   }
   const persona = (summarySettings.persona || '').trim();
-  const styleLine = persona ? `Adote exatamente o seguinte estilo de escrita/persona ao responder (sem quebrar as regras de formatação): ${persona}.` : '';
+  const styleLine = persona ? `Adote exatamente o seguinte estilo/persona ao responder (sem quebrar as regras de formatação): ${persona}.` : '';
   return `${detailPrompt} do seguinte texto em ${summarySettings.language === 'pt' ? 'português' : 'inglês'}.${styleLine ? `\n${styleLine}` : ''}
 
 Regras de formatação (siga exatamente):
@@ -219,15 +208,25 @@ ${text.substring(0, 50000)}`;
 }
 
 async function generateSummaryOR(text) {
-  const messages = [ { role: 'system', content: 'Você é um assistente de resumo que retorna lista numerada com tópicos curtos e subitens quando necessário.' }, { role: 'user', content: buildSummaryInstructions(text) } ];
+  const persona = (summarySettings.persona || '').trim();
+  const sys = persona
+    ? `Você é um assistente de resumo. Mantenha exatamente o estilo/persona a seguir durante toda a resposta: ${persona}. Siga as regras de formatação.`
+    : 'Você é um assistente de resumo que retorna lista numerada com tópicos curtos e subitens quando necessário.';
+  const messages = [
+    { role: 'system', content: sys },
+    { role: 'user', content: buildSummaryInstructions(text) }
+  ];
   return await orWithFallback(messages);
 }
 
 async function generatePdfTitleAndSummaryOR(text) {
   const persona = (summarySettings.persona || '').trim();
   const styleLine = persona ? `\nInstrua-se a escrever exatamente no seguinte estilo/persona (sem quebrar as regras de formatação): ${persona}.` : '';
+  const sys = persona
+    ? `Você é um assistente de resumo. Mantenha exatamente o estilo/persona a seguir durante toda a resposta: ${persona}. Siga as regras de formatação.`
+    : 'Você é um assistente de resumo que retorna lista numerada com tópicos curtos e subitens quando necessário.';
   const prompt = `Você receberá o conteúdo textual de um arquivo PDF. Gere:\n- TITLE: um título curto (no máximo 10 palavras), sem aspas/markdown\n- SUMMARY: um resumo estruturado conforme regras abaixo${styleLine}\n\nRegras do SUMMARY (siga exatamente):\n1) 3 a 8 itens numerados (1., 2., ...)\n2) Cada item: um tópico curto (3–8 palavras) seguido de dois pontos e uma frase breve\n3) Subitens opcionais iniciados com "- " (1–3)\n\nResponda estritamente neste formato:\nTITLE: <título curto>\nSUMMARY:\n1. <tópico curto>: <frase>\n- <subitem opcional>\n2. ...\n\nConteúdo (parcial):\n${text.substring(0, 50000)}`;
-  const messages = [ { role: 'user', content: prompt } ];
+  const messages = [ { role: 'system', content: sys }, { role: 'user', content: prompt } ];
   const { text: out, model } = await orWithFallback(messages);
   let title = null, summary = null;
   const lines = out.split(/\r?\n/);

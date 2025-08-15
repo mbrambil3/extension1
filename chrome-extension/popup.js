@@ -41,12 +41,42 @@ function loadSettings() {
     });
 }
 
+let personaDebounceTimer = null;
+
+function saveSettingsInternal(showToastFlag) {
+    const settings = {
+        autoSummary: document.getElementById('autoSummary').checked,
+        language: document.getElementById('language').value,
+        detailLevel: document.getElementById('detailLevel').value,
+        openrouterKey: document.getElementById('openrouterKey').value,
+        persona: document.getElementById('persona').value.trim()
+    };
+    chrome.runtime.sendMessage({ action: "updateSettings", isActive: settings.autoSummary, settings }, (response) => {
+        if (!response || !response.success) {
+            if (showToastFlag) showToast('Erro ao salvar configurações', 'error');
+            return;
+        }
+        updateStatusIndicator(response.isActive);
+        if (showToastFlag) showToast('Configurações salvas!', 'success');
+    });
+}
+
+function saveSettings() { saveSettingsInternal(true); }
+function saveSettingsSilent() { saveSettingsInternal(false); }
+
 function setupEventListeners() {
     document.getElementById('autoSummary').addEventListener('change', saveSettings);
     document.getElementById('language').addEventListener('change', saveSettings);
     document.getElementById('detailLevel').addEventListener('change', saveSettings);
     document.getElementById('openrouterKey').addEventListener('change', saveSettings);
-    document.getElementById('persona').addEventListener('input', saveSettings);
+
+    // Debounce no input da persona para evitar spam de toasts
+    document.getElementById('persona').addEventListener('input', () => {
+        clearTimeout(personaDebounceTimer);
+        personaDebounceTimer = setTimeout(() => {
+            saveSettingsSilent();
+        }, 500);
+    });
 
     document.getElementById('generateNow').addEventListener('click', generateSummaryNow);
     document.getElementById('viewHistory').addEventListener('click', openHistoryWindow);
@@ -95,24 +125,6 @@ function setupEventListeners() {
     });
 }
 
-function saveSettings() {
-    const settings = {
-        autoSummary: document.getElementById('autoSummary').checked,
-        language: document.getElementById('language').value,
-        detailLevel: document.getElementById('detailLevel').value,
-        openrouterKey: document.getElementById('openrouterKey').value,
-        persona: document.getElementById('persona').value.trim()
-    };
-    chrome.runtime.sendMessage({ action: "updateSettings", isActive: settings.autoSummary, settings }, (response) => {
-        if (response && response.success) {
-            updateStatusIndicator(response.isActive);
-            showToast('Configurações salvas!', 'success');
-        } else {
-            showToast('Erro ao salvar configurações', 'error');
-        }
-    });
-}
-
 function isRestrictedUrl(url) { return url.startsWith('chrome://') || url.startsWith('chrome-extension://') || url.startsWith('edge://') || url.startsWith('about:') || url.startsWith('view-source:'); }
 async function injectContentScript(tabId) { try { await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] }); return true; } catch (e) { return false; } }
 
@@ -124,33 +136,25 @@ function generateSummaryNow() {
     if (stopBtn) stopBtn.style.display = 'inline-block';
 
     // Salvar configurações atuais silenciosamente antes de gerar
-    const settings = {
-        autoSummary: document.getElementById('autoSummary').checked,
-        language: document.getElementById('language').value,
-        detailLevel: document.getElementById('detailLevel').value,
-        openrouterKey: document.getElementById('openrouterKey').value,
-        persona: document.getElementById('persona').value.trim()
-    };
-    chrome.runtime.sendMessage({ action: "updateSettings", isActive: settings.autoSummary, settings }, () => {
-        // Após salvar, prosseguir com a geração
-        chrome.tabs.query({ active: true, currentWindow: true }, async function(tabs) {
-            const tab = tabs[0];
-            if (!tab) { button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; showToast('Nenhuma aba ativa encontrada', 'error'); return; }
-            if (isRestrictedUrl(tab.url || '')) { button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; showToast('Esta página não permite injeção de conteúdo (chrome://, etc.)', 'warning'); return; }
-            function sendGenerate() {
-                chrome.tabs.sendMessage(tab.id, { action: 'generateSummary', manual: true }, function(response) {
-                    button.classList.remove('loading');
-                    button.textContent = '🎯 Gerar Resumo Agora';
-                    const stopBtn = document.getElementById('stopNow');
-                    if (stopBtn) stopBtn.style.display = 'none';
-                    if (chrome.runtime.lastError) { const msg = chrome.runtime.lastError.message || ''; if (msg.includes('Receiving end does not exist')) { showToast('Tentando preparar a página, clique novamente...', 'warning'); } else { showToast('Erro: ' + msg, 'error'); } return; }
-                    if (response && response.received) { if (response.started) { showToast('Resumo sendo gerado...', 'success'); } else { showToast(response.errorMessage || 'Conteúdo não suportado para extração direta', 'warning'); } } else { showToast('A página pode não ter conteúdo suficiente', 'warning'); }
-                });
-            }
-            chrome.tabs.sendMessage(tab.id, { ping: true }, async function(response) {
-                if (chrome.runtime.lastError || !response || !response.pong) { const injected = await injectContentScript(tab.id); if (injected) { setTimeout(() => { chrome.tabs.sendMessage(tab.id, { ping: true }, function(resp2) { if (!chrome.runtime.lastError && resp2 && resp2.pong) { sendGenerate(); } else { showToast('Não foi possível preparar a página para resumo', 'error'); } }); }, 300); } else { showToast('Não foi possível preparar a página para resumo', 'error'); } button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; return; }
-                sendGenerate();
+    saveSettingsSilent();
+
+    chrome.tabs.query({ active: true, currentWindow: true }, async function(tabs) {
+        const tab = tabs[0];
+        if (!tab) { button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; showToast('Nenhuma aba ativa encontrada', 'error'); return; }
+        if (isRestrictedUrl(tab.url || '')) { button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; showToast('Esta página não permite injeção de conteúdo (chrome://, etc.)', 'warning'); return; }
+        function sendGenerate() {
+            chrome.tabs.sendMessage(tab.id, { action: 'generateSummary', manual: true }, function(response) {
+                button.classList.remove('loading');
+                button.textContent = '🎯 Gerar Resumo Agora';
+                const stopBtn = document.getElementById('stopNow');
+                if (stopBtn) stopBtn.style.display = 'none';
+                if (chrome.runtime.lastError) { const msg = chrome.runtime.lastError.message || ''; if (msg.includes('Receiving end does not exist')) { showToast('Tentando preparar a página, clique novamente...', 'warning'); } else { showToast('Erro: ' + msg, 'error'); } return; }
+                if (response && response.received) { if (response.started) { showToast('Resumo sendo gerado...', 'success'); } else { showToast(response.errorMessage || 'Conteúdo não suportado para extração direta', 'warning'); } } else { showToast('A página pode não ter conteúdo suficiente', 'warning'); }
             });
+        }
+        chrome.tabs.sendMessage(tab.id, { ping: true }, async function(response) {
+            if (chrome.runtime.lastError || !response || !response.pong) { const injected = await injectContentScript(tab.id); if (injected) { setTimeout(() => { chrome.tabs.sendMessage(tab.id, { ping: true }, function(resp2) { if (!chrome.runtime.lastError && resp2 && resp2.pong) { sendGenerate(); } else { showToast('Não foi possível preparar a página para resumo', 'error'); } }); }, 300); } else { showToast('Não foi possível preparar a página para resumo', 'error'); } button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; return; }
+            sendGenerate();
         });
     });
 }
@@ -168,7 +172,7 @@ function showToast(message, type = 'success') {
     toast.textContent = message;
     container.appendChild(toast);
     setTimeout(() => { toast.classList.add('show'); }, 100);
-    setTimeout(() => { toast.classList.remove('show'); setTimeout(() => { if (container.contains(toast)) container.removeChild(toast); }, 300); }, 3000);
+    setTimeout(() => { toast.classList.remove('show'); setTimeout(() => { if (container.contains(toast)) container.removeChild(toast); }, 300); }, 2000);
 }
 
 document.addEventListener('visibilitychange', async function() {
