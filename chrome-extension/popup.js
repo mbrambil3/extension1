@@ -86,7 +86,8 @@ function saveSettings() {
         autoSummary: document.getElementById('autoSummary').checked,
         language: document.getElementById('language').value,
         detailLevel: document.getElementById('detailLevel').value,
-        openrouterKey: document.getElementById('openrouterKey').value
+        openrouterKey: document.getElementById('openrouterKey').value,
+        persona: (document.getElementById('persona').value || 'assertivo').trim() || 'assertivo'
     };
     chrome.runtime.sendMessage({ action: "updateSettings", isActive: settings.autoSummary, settings }, (response) => {
         if (response && response.success) {
