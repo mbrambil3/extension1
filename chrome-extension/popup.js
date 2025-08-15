@@ -116,6 +116,8 @@ function generateSummaryNow() {
     const button = document.getElementById('generateNow');
     button.classList.add('loading');
     button.textContent = 'Gerando...';
+    const stopBtn = document.getElementById('stopNow');
+    if (stopBtn) stopBtn.style.display = 'inline-block';
     chrome.tabs.query({ active: true, currentWindow: true }, async function(tabs) {
         const tab = tabs[0];
         if (!tab) { button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; showToast('Nenhuma aba ativa encontrada', 'error'); return; }
