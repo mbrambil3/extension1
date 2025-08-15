@@ -37,6 +37,20 @@ body {
     margin-bottom: 5px;
 }
 
+.plan-badge {
+    display: inline-block;
+    margin-left: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: #edf2f7;
+    color: #4a5568;
+    vertical-align: middle;
+}
+.plan-badge.premium { background: #e6fffa; color: #0f766e; border: 1px solid #99f6e4; }
+.plan-badge.free { background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; }
+
 .subtitle {
     color: #718096;
     font-size: 14px;
