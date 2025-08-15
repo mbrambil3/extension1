@@ -72,6 +72,8 @@ function shouldAutoSummarize(text) { const wordCount = text.split(' ').length; r
 function generateSummary(text) {
   if (!text || text.length < 100) { showErrorPanel('Texto muito curto para gerar resumo'); return; }
   showLoadingPanel();
+  try { window.__autoSummAbortController?.abort?.(); } catch (e) {}
+  window.__autoSummAbortController = new AbortController();
   chrome.runtime.sendMessage({ action: "generateSummary", text: text }, (response) => {
     if (chrome.runtime.lastError) { showErrorPanel('Erro de comunicação: ' + chrome.runtime.lastError.message); return; }
     if (response && response.success) { showSummaryPanel(response.summary, response.modelUsed); }
