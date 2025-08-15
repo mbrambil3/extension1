@@ -29,6 +29,14 @@
 }
 
 /* Modo escuro baseado no sistema */
+/* Forçar tema escuro independentemente do sistema */
+.auto-summarizer-panel {
+  background: rgba(26, 32, 44, 0.95) !important;
+  border-left-color: #4a5568 !important;
+  color: #f7fafc !important;
+}
+/* Remover variações por prefers-color-scheme para evitar letras brancas em fundo claro */
+/* (Mantemos os demais ajustes de contraste)
 @media (prefers-color-scheme: dark) {
   .auto-summarizer-panel {
     background: rgba(26, 32, 44, 0.95);
@@ -36,6 +44,7 @@
     color: #f7fafc;
   }
 }
+*/
 
 .panel-content {
   height: 100%;
