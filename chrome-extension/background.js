@@ -4,6 +4,7 @@ let summarySettings = {
   autoSummary: true,
   language: 'pt',
   detailLevel: 'medium',
+  persona: 'assertivo',
   openrouterKey: ''
 };
 
