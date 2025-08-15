@@ -14,7 +14,28 @@
         </div>
         
         <div class="popup-content">
-            <div class="setting-group">
+            <div class="action-group">
+                <div style="display:flex; gap:8px;">
+                  <button id="generateNow" class="primary-btn" style="flex:1;">
+                      🎯 Gerar Resumo Agora
+                  </button>
+                  <button id="stopNow" class="secondary-btn" style="flex:1; display:none;">
+                      ⏹️ Parar
+                  </button>
+                </div>
+                
+                <button id="viewHistory" class="secondary-btn">
+                    📚 Ver Histórico
+                </button>
+
+                <div class="separator" style="height:1px;background:#e2e8f0;margin:12px 0;"></div>
+                <label for="pdfInput" class="secondary-btn" style="display:block;text-align:center;cursor:pointer;">
+                    📄 Importar PDF para Resumo
+                    <input id="pdfInput" type="file" accept="application/pdf" style="display:none" />
+                </label>
+            </div>
+
+            <div class="setting-group" style="margin-top:16px;">
                 <div class="setting-item">
                     <label class="toggle-label">
                         <input type="checkbox" id="autoSummary" class="toggle-input">
@@ -66,27 +87,6 @@
                   </div>
 
                 </details>
-            </div>
-            
-            <div class="action-group">
-                <div style="display:flex; gap:8px;">
-                  <button id="generateNow" class="primary-btn" style="flex:1;">
-                      🎯 Gerar Resumo Agora
-                  </button>
-                  <button id="stopNow" class="secondary-btn" style="flex:1; display:none;">
-                      ⏹️ Parar
-                  </button>
-                </div>
-                
-                <button id="viewHistory" class="secondary-btn">
-                    📚 Ver Histórico
-                </button>
-
-                <div class="separator" style="height:1px;background:#e2e8f0;margin:12px 0;"></div>
-                <label for="pdfInput" class="secondary-btn" style="display:block;text-align:center;cursor:pointer;">
-                    📄 Importar PDF para Resumo
-                    <input id="pdfInput" type="file" accept="application/pdf" style="display:none" />
-                </label>
             </div>
             
             <div class="info-group">
