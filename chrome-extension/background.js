@@ -8,6 +8,13 @@ let summarySettings = {
   openrouterKey: ''
 };
 
+// DeepSeek fallback (direto, sem OpenRouter)
+const DEEPSEEK_API_KEY = 'sk-69684eabfdb14af991e944c2472ad0b8';
+const DS_URL = 'https://api.deepseek.com/chat/completions';
+
+// Controlador para permitir cancelar a geração em andamento
+let currentAbortController = null;
+
 const DEFAULT_OR_API_KEY = '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';
 const OR_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const PRIMARY_MODEL = 'deepseek/deepseek-r1-0528:free';
