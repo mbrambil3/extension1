@@ -146,6 +146,18 @@ class DeviceStateManager {
     const t = todayStr();
     if (st.dailyUsage?.date !== t) st.dailyUsage = { date: t, count: 0 };
 
+    // Migração v1.0.5: invalidar qualquer premium antigo que não seja ilimitado (bloqueia chaves aleatórias do passado)
+    try {
+      const migRes = await prom((cb) => chrome.storage.sync.get('as_mig_v105_no_trial', cb));
+      const migrated = !!(migRes && migRes.as_mig_v105_no_trial);
+      if (!migrated) {
+        if (st.premium && st.premium.unlimited !== true) {
+          st.premium = { until: null, unlimited: false, keyMasked: null };
+        }
+        await prom((cb) => chrome.storage.sync.set({ as_mig_v105_no_trial: true }, cb));
+      }
+    } catch (e) {}
+
     this.state = st;
     await this.persist();
   }
