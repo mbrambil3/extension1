@@ -10,7 +10,7 @@
     <div class="popup-container">
         <div class="popup-header">
             <h2>📄 Auto-Summarizer</h2>
-            <p class="version">v1.0.0</p>
+            <p class="version">v1.0.4</p>
         </div>
         
         <div class="popup-content">
@@ -43,8 +43,18 @@
 
                 <div class="setting-item">
                     <label for="persona" class="setting-label">Personalidade do Resumo</label>
-                    <input id="persona" type="text" class="setting-select" placeholder="Ex.: assertivo, criativo, inteligente, objetivo" />
+                    <input id="persona" type="text" class="setting-select" placeholder="Ex.: como um homem das cavernas, ogro do pântano, sarcástico..." />
                     <small class="setting-description">Descreva como deseja o tom do resumo</small>
+                </div>
+
+                <div class="setting-item" style="border-top:1px solid #e2e8f0; margin-top:8px; padding-top:8px;">
+                    <label class="setting-label">Plano e Limites</label>
+                    <div id="planStatus" class="setting-description">Plano: Free • Hoje: 0/30</div>
+                    <div style="display:flex; gap:8px; margin-top:6px;">
+                        <input id="subscriptionKey" type="text" class="setting-select" placeholder="KEY de ASSINATURA" style="flex:1;" />
+                        <button id="applyKeyBtn" class="secondary-btn">Ativar Premium</button>
+                    </div>
+                    <small class="setting-description">Insira sua KEY para liberar Premium por 30 dias. Master Key libera ilimitado.</small>
                 </div>
 
                 <details id="advancedOptions">

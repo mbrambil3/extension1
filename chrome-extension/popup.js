@@ -10,6 +10,26 @@ document.addEventListener('DOMContentLoaded', function() {
     setupEventListeners();
 });
 
+async function loadQuotaStatus() {
+    return new Promise((resolve) => {
+        chrome.runtime.sendMessage({ action: 'getQuotaStatus' }, (resp) => {
+            resolve(resp || { success: false });
+        });
+    });
+}
+
+function renderPlanStatus(status) {
+    const el = document.getElementById('planStatus');
+    if (!el || !status || !status.success) return;
+    let txt = '';
+    if (status.plan === 'premium_unlimited') txt = 'Plano: Premium Ilimitado';
+    else if (status.plan === 'premium') {
+        const until = status.premiumUntil ? new Date(status.premiumUntil) : null;
+        txt = 'Plano: Premium' + (until ? ` (até ${until.toLocaleDateString('pt-BR')})` : '');
+    } else txt = `Plano: Free • Hoje: ${status.countToday}/${status.limit}`;
+    el.textContent = txt;
+}
+
 function loadSettings() {
     chrome.runtime.sendMessage({ action: "getSettings" }, async (response) => {
         if (response) {
@@ -18,8 +38,6 @@ function loadSettings() {
             document.getElementById('detailLevel').value = response.settings.detailLevel;
             document.getElementById('openrouterKey').value = response.settings.openrouterKey || '';
             document.getElementById('persona').value = response.settings.persona || '';
-            // Indicador de Extensão Ativa/Inativa removido
-            // Atualiza texto do provedor no rodapé com base no último modelo utilizado
             try {
                 const res = await chrome.storage.local.get('lastModelUsed');
                 const model = (res && res.lastModelUsed) ? String(res.lastModelUsed) : '';
@@ -32,12 +50,11 @@ function loadSettings() {
                 else if (lower.includes('qwen')) provider = 'Qwen';
                 else if (model.trim()) provider = 'Fallback';
                 const footer = document.getElementById('providerDisplay');
-                if (footer) {
-                    if (provider) footer.textContent = `Powered by ${provider}`;
-                    else footer.textContent = 'Powered by Deepseek';
-                }
+                if (footer) footer.textContent = provider ? `Powered by ${provider}` : 'Powered by Deepseek';
             } catch (e) {}
         }
+        const quota = await loadQuotaStatus();
+        renderPlanStatus(quota);
     });
 }
 
@@ -51,13 +68,15 @@ function saveSettingsInternal(showToastFlag) {
         openrouterKey: document.getElementById('openrouterKey').value,
         persona: document.getElementById('persona').value.trim()
     };
-    chrome.runtime.sendMessage({ action: "updateSettings", isActive: settings.autoSummary, settings }, (response) => {
+    chrome.runtime.sendMessage({ action: "updateSettings", isActive: settings.autoSummary, settings }, async (response) => {
         if (!response || !response.success) {
             if (showToastFlag) showToast('Erro ao salvar configurações', 'error');
             return;
         }
         updateStatusIndicator(response.isActive);
         if (showToastFlag) showToast('Configurações salvas!', 'success');
+        const quota = await loadQuotaStatus();
+        renderPlanStatus(quota);
     });
 }
 
@@ -78,15 +97,25 @@ function setupEventListeners() {
         }, 500);
     });
 
+    document.getElementById('applyKeyBtn').addEventListener('click', async () => {
+        const key = (document.getElementById('subscriptionKey').value || '').trim();
+        if (!key) { showToast('Informe a KEY de ASSINATURA', 'warning'); return; }
+        chrome.runtime.sendMessage({ action: 'applySubscriptionKey', key }, async (resp) => {
+            if (!resp || !resp.success) { showToast(resp?.error || 'Falha ao aplicar KEY', 'error'); return; }
+            const quota = await loadQuotaStatus();
+            renderPlanStatus(quota);
+            showToast('Premium ativado com sucesso!', 'success');
+            document.getElementById('subscriptionKey').value = '';
+        });
+    });
+
     document.getElementById('generateNow').addEventListener('click', generateSummaryNow);
     document.getElementById('viewHistory').addEventListener('click', openHistoryWindow);
 
     const stopBtn = document.getElementById('stopNow');
     if (stopBtn) {
         stopBtn.addEventListener('click', () => {
-            try {
-                chrome.runtime.sendMessage({ action: 'stopGeneration' }, () => {});
-            } catch (e) {}
+            try { chrome.runtime.sendMessage({ action: 'stopGeneration' }, () => {}); } catch (e) {}
             showToast('Geração interrompida', 'warning');
             stopBtn.style.display = 'none';
             const btn = document.getElementById('generateNow');
@@ -128,6 +157,34 @@ function setupEventListeners() {
 function isRestrictedUrl(url) { return url.startsWith('chrome://') || url.startsWith('chrome-extension://') || url.startsWith('edge://') || url.startsWith('about:') || url.startsWith('view-source:'); }
 async function injectContentScript(tabId) { try { await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] }); return true; } catch (e) { return false; } }
 
+async function extractPdfFromUrl(url) {
+    const pdfjs = window.pdfjsLib;
+    if (!pdfjs) throw new Error('PDF.js não carregou');
+    try { pdfjs.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('pdfjs/pdf.worker.min.js'); } catch (e) {}
+    // Tenta carregar via PDF.js por URL diretamente
+    try {
+        const doc = await pdfjs.getDocument({ url, disableWorker: true, withCredentials: false }).promise;
+        let fullText = '';
+        const pages = Math.min(doc.numPages, 10);
+        for (let i = 1; i <= pages; i++) { const page = await doc.getPage(i); const content = await page.getTextContent(); fullText += content.items.map(it => it.str).join(' ') + '\n'; }
+        return (fullText || '').trim();
+    } catch (e) {
+        // Fallback: tentar baixar bytes e carregar por data
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error('Falha ao baixar PDF');
+        const buf = await resp.arrayBuffer();
+        const doc = await pdfjs.getDocument({ data: new Uint8Array(buf), disableWorker: true }).promise;
+        let fullText = '';
+        const pages = Math.min(doc.numPages, 10);
+        for (let i = 1; i <= pages; i++) { const page = await doc.getPage(i); const content = await page.getTextContent(); fullText += content.items.map(it => it.str).join(' ') + '\n'; }
+        return (fullText || '').trim();
+    }
+}
+
+function fileNameFromUrl(url) {
+    try { const u = new URL(url); const p = u.pathname.split('/').pop() || 'documento.pdf'; return decodeURIComponent(p); } catch { return 'documento.pdf'; }
+}
+
 function generateSummaryNow() {
     const button = document.getElementById('generateNow');
     button.classList.add('loading');
@@ -141,19 +198,54 @@ function generateSummaryNow() {
     chrome.tabs.query({ active: true, currentWindow: true }, async function(tabs) {
         const tab = tabs[0];
         if (!tab) { button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; showToast('Nenhuma aba ativa encontrada', 'error'); return; }
+
+        // Se for PDF no leitor nativo (URL .pdf), extrair no próprio popup
+        if (/\.pdf($|\?|#)/i.test(tab.url || '')) {
+            try {
+                const text = await extractPdfFromUrl(tab.url);
+                if (!text || text.length < 50) throw new Error('Não foi possível extrair texto do PDF');
+                const payload = `Arquivo: ${fileNameFromUrl(tab.url)}\n\n${text.substring(0, 50000)}`;
+                chrome.runtime.sendMessage({ action: 'generateSummary', text: payload, source: 'pdf', fileName: fileNameFromUrl(tab.url) }, (response) => {
+                    button.classList.remove('loading');
+                    button.textContent = '🎯 Gerar Resumo Agora';
+                    if (stopBtn) stopBtn.style.display = 'none';
+                    if (chrome.runtime.lastError) { showToast('Erro: ' + chrome.runtime.lastError.message, 'error'); return; }
+                    if (response && response.success) { showToast('Resumo do PDF gerado (Histórico atualizado)', 'success'); }
+                    else { showToast(response?.error || 'Falha ao gerar resumo do PDF', 'error'); }
+                });
+                return;
+            } catch (e) {
+                // fallback para injeção normal
+            }
+        }
+
         if (isRestrictedUrl(tab.url || '')) { button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; showToast('Esta página não permite injeção de conteúdo (chrome://, etc.)', 'warning'); return; }
         function sendGenerate() {
             chrome.tabs.sendMessage(tab.id, { action: 'generateSummary', manual: true }, function(response) {
                 button.classList.remove('loading');
                 button.textContent = '🎯 Gerar Resumo Agora';
-                const stopBtn = document.getElementById('stopNow');
                 if (stopBtn) stopBtn.style.display = 'none';
                 if (chrome.runtime.lastError) { const msg = chrome.runtime.lastError.message || ''; if (msg.includes('Receiving end does not exist')) { showToast('Tentando preparar a página, clique novamente...', 'warning'); } else { showToast('Erro: ' + msg, 'error'); } return; }
                 if (response && response.received) { if (response.started) { showToast('Resumo sendo gerado...', 'success'); } else { showToast(response.errorMessage || 'Conteúdo não suportado para extração direta', 'warning'); } } else { showToast('A página pode não ter conteúdo suficiente', 'warning'); }
             });
         }
         chrome.tabs.sendMessage(tab.id, { ping: true }, async function(response) {
-            if (chrome.runtime.lastError || !response || !response.pong) { const injected = await injectContentScript(tab.id); if (injected) { setTimeout(() => { chrome.tabs.sendMessage(tab.id, { ping: true }, function(resp2) { if (!chrome.runtime.lastError && resp2 && resp2.pong) { sendGenerate(); } else { showToast('Não foi possível preparar a página para resumo', 'error'); } }); }, 300); } else { showToast('Não foi possível preparar a página para resumo', 'error'); } button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; return; }
+            if (chrome.runtime.lastError || !response || !response.pong) {
+                const injected = await injectContentScript(tab.id);
+                if (injected) {
+                    setTimeout(() => {
+                        chrome.tabs.sendMessage(tab.id, { ping: true }, function(resp2) {
+                            if (!chrome.runtime.lastError && resp2 && resp2.pong) { sendGenerate(); }
+                            else { showToast('Não foi possível preparar a página para resumo', 'error'); }
+                        });
+                    }, 300);
+                } else {
+                    showToast('Não foi possível preparar a página para resumo', 'error');
+                }
+                button.classList.remove('loading');
+                button.textContent = '🎯 Gerar Resumo Agora';
+                return;
+            }
             sendGenerate();
         });
     });
@@ -161,9 +253,7 @@ function generateSummaryNow() {
 
 function openHistoryWindow() { chrome.tabs.create({ url: chrome.runtime.getURL('history.html') }); }
 
-function updateStatusIndicator() {
-    // Removido indicador de Extensão Ativa/Inativa conforme solicitado
-}
+function updateStatusIndicator() { /* indicador removido */ }
 
 function showToast(message, type = 'success') {
     const container = document.getElementById('toast-container');
@@ -172,11 +262,5 @@ function showToast(message, type = 'success') {
     toast.textContent = message;
     container.appendChild(toast);
     setTimeout(() => { toast.classList.add('show'); }, 100);
-    setTimeout(() => { toast.classList.remove('show'); setTimeout(() => { if (container.contains(toast)) container.removeChild(toast); }, 300); }, 2000);
+    setTimeout(() => { toast.classList.remove('show'); setTimeout(() => { if (container.contains(toast)) container.removeChild(toast); }, 300); }, 3000);
 }
-
-document.addEventListener('visibilitychange', async function() {
-    if (!document.hidden) {
-        loadSettings();
-    }
-});

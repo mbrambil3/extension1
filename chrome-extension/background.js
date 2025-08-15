@@ -1,4 +1,4 @@
-// Background script (OpenRouter only) com cache, cooldown e múltiplos fallbacks
+// Background script (OpenRouter only) com cache, cooldown e múltiplos fallbacks + Plano Free/Premium
 let isExtensionActive = true;
 let summarySettings = {
   autoSummary: true,
@@ -8,8 +8,9 @@ let summarySettings = {
   openrouterKey: ''
 };
 
-// Removido DeepSeek fallback direto por padrão
-// Caso deseje reativar no futuro, adicionar opção de usuário e chave dedicada.
+// Plano/Quota
+const DAILY_LIMIT = 30; // free
+const MASTER_KEY = 'MASTER-UNLIMITED-0001'; // Altere esta chave mestra conforme desejar
 
 // Controlador para permitir cancelar a geração em andamento
 let currentAbortController = null;
@@ -27,7 +28,7 @@ const FALLBACK_MODELS = [
   'google/gemini-2.0-flash-exp:free',
   'openai/gpt-oss-20b:free',
   'deepseek/deepseek-r1-distill-llama-70b:free'
-]; // fallback é automático e ocorre em caso de 429/503, com cooldown progressivo
+];
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
 function getApiKey() {
@@ -55,12 +56,55 @@ chrome.commands.onCommand.addListener((command) => {
   }
 });
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'stopGeneration') {
-    try { currentAbortController?.abort?.(); } catch (e) {}
-    sendResponse({ success: true, stopped: true });
-    return true;
+// Helpers de data/armazenamento
+function todayStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+async function getQuota() {
+  const r = await chrome.storage.local.get(['dailyUsage', 'premium']);
+  let dailyUsage = r.dailyUsage || { date: todayStr(), count: 0 };
+  let premium = r.premium || { until: null, unlimited: false, key: null };
+  // Reset se mudou o dia
+  const t = todayStr();
+  if (dailyUsage.date !== t) dailyUsage = { date: t, count: 0 };
+  return { dailyUsage, premium };
+}
+
+async function saveQuota(dailyUsage, premium) {
+  await chrome.storage.local.set({ dailyUsage, premium });
+}
+
+function isPremiumActive(premium) {
+  if (!premium) return false;
+  if (premium.unlimited) return true;
+  if (premium.until) {
+    try { return new Date(premium.until).getTime() > Date.now(); } catch (e) { return false; }
   }
+  return false;
+}
+
+async function enforceQuotaOrFail() {
+  const { dailyUsage, premium } = await getQuota();
+  if (isPremiumActive(premium)) return { ok: true, dailyUsage, premium };
+  if (dailyUsage.count >= DAILY_LIMIT) return { ok: false, error: `Limite diário atingido (${DAILY_LIMIT}/${DAILY_LIMIT}). Insira sua KEY de ASSINATURA para liberar Premium por 30 dias.` };
+  return { ok: true, dailyUsage, premium };
+}
+
+async function registerSuccessUsage() {
+  const { dailyUsage, premium } = await getQuota();
+  // Mesmo Premium, manter contagem para referência (não limita)
+  const t = todayStr(); if (dailyUsage.date !== t) { dailyUsage.date = t; dailyUsage.count = 0; }
+  dailyUsage.count = (dailyUsage.count || 0) + 1;
+  await saveQuota(dailyUsage, premium);
+  return dailyUsage.count;
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'stopGeneration') {
     try { currentAbortController?.abort?.(); } catch (e) {}
     sendResponse({ success: true, stopped: true });
@@ -76,12 +120,48 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.storage.sync.set({ extensionActive: isExtensionActive, summarySettings }, () => sendResponse({ success: true, isActive: isExtensionActive, settings: summarySettings }));
     return true;
   }
-  if (message.action === 'generateSummary') {
-    if (!message.text || message.text.length < 50) { sendResponse({ success: false, error: 'Conteúdo insuficiente para gerar resumo' }); return true; }
-    const fromPdf = message.source === 'pdf';
-    const fileName = message.fileName || 'Documento PDF';
 
+  // Plano/Quota
+  if (message.action === 'getQuotaStatus') {
     (async () => {
+      const { dailyUsage, premium } = await getQuota();
+      sendResponse({
+        success: true,
+        plan: isPremiumActive(premium) ? (premium.unlimited ? 'premium_unlimited' : 'premium') : 'free',
+        premiumUntil: premium.until || null,
+        countToday: dailyUsage.count || 0,
+        limit: DAILY_LIMIT
+      });
+    })();
+    return true;
+  }
+  if (message.action === 'applySubscriptionKey') {
+    (async () => {
+      const key = (message.key || '').trim();
+      if (!key || key.length < 6) { sendResponse({ success: false, error: 'KEY inválida' }); return; }
+      const { dailyUsage, premium } = await getQuota();
+      if (key === MASTER_KEY) {
+        premium.unlimited = true; premium.until = null; premium.key = key;
+      } else {
+        const until = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        premium.unlimited = false; premium.until = until.toISOString(); premium.key = key;
+      }
+      await saveQuota(dailyUsage, premium);
+      sendResponse({ success: true, plan: premium.unlimited ? 'premium_unlimited' : 'premium', premiumUntil: premium.until || null });
+    })();
+    return true;
+  }
+
+  if (message.action === 'generateSummary') {
+    // Enforce quota antes de qualquer coisa
+    (async () => {
+      const quotaCheck = await enforceQuotaOrFail();
+      if (!quotaCheck.ok) { sendResponse({ success: false, error: quotaCheck.error }); return; }
+
+      if (!message.text || message.text.length < 50) { sendResponse({ success: false, error: 'Conteúdo insuficiente para gerar resumo' }); return; }
+      const fromPdf = message.source === 'pdf';
+      const fileName = message.fileName || 'Documento PDF';
+
       try {
         const cooldown = await getCooldown();
         if (cooldown > Date.now()) { const secs = Math.ceil((cooldown - Date.now()) / 1000); sendResponse({ success: false, error: `Serviço temporariamente indisponível. Aguarde ${secs}s.` }); return; }
@@ -91,6 +171,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const cached = await getFromCache(key);
         if (cached && (Date.now() - cached.timestamp) < CACHE_TTL_MS) {
           await chrome.storage.local.set({ lastModelUsed: cached.model || 'cache' });
+          // Contabiliza uso
+          await registerSuccessUsage();
           if (fromPdf) { await saveToHistory(message.text, cached.summary, sender.tab, { inferredTitle: cached.title || fileName, source: 'pdf', persona: personaKey }); sendResponse({ success: true, summary: cached.summary, title: cached.title || fileName, modelUsed: cached.model || 'cache' }); }
           else { await saveToHistory(message.text, cached.summary, sender.tab, { persona: personaKey }); sendResponse({ success: true, summary: cached.summary, title: sender?.tab?.title || 'Página', modelUsed: cached.model || 'cache' }); }
           return;
@@ -114,12 +196,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await chrome.storage.local.set({ lastModelUsed: modelUsed });
 
         const extra = { persona: (summarySettings.persona || '').trim() };
+        // Contabiliza uso
+        await registerSuccessUsage();
         if (fromPdf) { await saveToHistory(message.text, summary, sender.tab, { inferredTitle: title || fileName, source: 'pdf', ...extra }); sendResponse({ success: true, summary, title: title || fileName, modelUsed }); }
         else { await saveToHistory(message.text, summary, sender.tab, extra); sendResponse({ success: true, summary, title: sender?.tab?.title || 'Página', modelUsed }); }
       } catch (error) {
         const msg = (error && error.message) ? error.message : 'Falha ao acessar o serviço de IA';
         const status = (error && error.status) ? String(error.status) : (msg.match(/\b(\d{3})\b/) || [])[1];
-        // Tratamento dedicado para credenciais inválidas
         if (status === '401' || /User not found/i.test(msg)) {
           sendResponse({ success: false, error: 'Sua OpenRouter API Key parece inválida. Abra o popup e informe sua própria chave.' });
           return;
@@ -132,12 +215,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })();
     return true;
   }
+
   if (message.action === 'getHistory') { getHistory().then(h => sendResponse({ history: h })); return true; }
   if (message.action === 'clearHistory') { clearHistory().then(() => sendResponse({ success: true })); return true; }
 });
 
 async function orRequest(messages, model) {
-  // Sempre buscar a chave mais recente antes de requisitar (caso usuário tenha acabado de salvar no popup)
   await new Promise((resolve) => chrome.storage.sync.get(['summarySettings'], (r) => { if (r && r.summarySettings) summarySettings = { ...summarySettings, ...r.summarySettings }; resolve(); }));
   const headers = { 'Authorization': `Bearer ${getApiKey()}`, 'Content-Type': 'application/json', 'HTTP-Referer': chrome.runtime.getURL(''), 'X-Title': 'Auto-Summarizer OR' };
   const body = JSON.stringify({ model, messages, temperature: 0.7, max_tokens: 1024 });
@@ -155,10 +238,10 @@ async function orWithFallback(messages) {
     if (!err) return true;
     const s = err.status;
     const msg = String(err.message || '').toLowerCase();
-    if (s === 401 || s === 403) return false; // não usar fallback para credenciais inválidas
-    if (s === 429 || s === 503) return true; // limite/indisponível
-    if (typeof s === 'number' && s >= 500) return true; // outros 5xx
-    if (!s) return true; // erros de rede/fetch
+    if (s === 401 || s === 403) return false;
+    if (s === 429 || s === 503) return true;
+    if (typeof s === 'number' && s >= 500) return true;
+    if (!s) return true;
     if (msg.includes('failed to fetch') || msg.includes('network') || msg.includes('timeout')) return true;
     return false;
   };
@@ -180,7 +263,6 @@ async function orWithFallback(messages) {
         }
       }
     }
-    // Todos os modelos do OpenRouter falharam
     throw new Error('Serviço temporariamente indisponível após múltiplas tentativas. Tente novamente em instantes.');
   }
 }
@@ -246,7 +328,7 @@ async function setCooldown(ms) { const until = Date.now() + (ms || 20000); await
 
 async function saveToHistory(originalText, summary, tab, options = {}) {
   try {
-    const historyItem = { id: Date.now() + Math.random(), title: (options?.inferredTitle) || tab?.title || 'Página sem título', url: (options?.source === 'pdf') ? (tab?.url || 'arquivo-importado') : (tab?.url || 'URL desconhecida'), favicon: (tab?.favIconUrl && String(tab.favIconUrl).trim()) ? tab.favIconUrl : null, isPdf: options?.source === 'pdf', source: options?.source || 'web', persona: options?.persona || '', originalText: originalText.substring(0, 500) + (originalText.length > 500 ? '...' : ''), summary: summary, timestamp: new Date().toISOString(), wordCount: originalText.split(' ').length };
+    const historyItem = { id: Date.now() + Math.random(), title: (options?.inferredTitle) || tab?.title || 'Página sem título', url: (options?.source === 'pdf') ? (tab?.url || 'arquivo-importado') : (tab?.url || 'URL desconhecida'), favicon: (tab?.favIconUrl && String(tab?.favIconUrl).trim()) ? tab.favIconUrl : null, isPdf: options?.source === 'pdf', source: options?.source || 'web', persona: options?.persona || '', originalText: originalText.substring(0, 500) + (originalText.length > 500 ? '...' : ''), summary: summary, timestamp: new Date().toISOString(), wordCount: originalText.split(' ').length };
     const result = await chrome.storage.local.get('summaryHistory'); const history = result.summaryHistory || []; history.unshift(historyItem); const limitedHistory = history.slice(0, 50); await chrome.storage.local.set({ summaryHistory: limitedHistory });
   } catch (error) { console.error('Erro ao salvar no histórico:', error); }
 }
