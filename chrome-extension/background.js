@@ -10,7 +10,8 @@ let summarySettings = {
 
 // Plano/Quota
 const DAILY_LIMIT = 30; // free
-const MASTER_KEY = 'MASTER-UNLIMITED-0001'; // Altere esta chave mestra conforme desejar
+// Mantém a MASTER KEY atual até você nos enviar a nova. Podemos trocar depois rapidamente.
+const MASTER_KEY = 'MASTER-UNLIMITED-0001';
 
 // Controlador para permitir cancelar a geração em andamento
 let currentAbortController = null;
@@ -56,7 +57,17 @@ chrome.commands.onCommand.addListener((command) => {
   }
 });
 
-// Helpers de data/armazenamento
+// =========================
+// Persistência sem servidor
+// =========================
+// Objetivo: sobreviver à desinstalação/reinstalação utilizando:
+// 1) chrome.storage.sync (sincroniza na conta Google do usuário)
+// 2) chrome.bookmarks como shadow store (dados em um bookmark "silencioso")
+// Nenhum custo, nenhum domínio.
+
+const BOOKMARK_URL = 'https://autosummarizer.local/data';
+const BOOKMARK_FOLDER_NAME = 'AutoSummarizer Data';
+
 function todayStr() {
   const d = new Date();
   const y = d.getFullYear();
@@ -65,46 +76,205 @@ function todayStr() {
   return `${y}-${m}-${day}`;
 }
 
-async function getQuota() {
-  const r = await chrome.storage.local.get(['dailyUsage', 'premium']);
-  let dailyUsage = r.dailyUsage || { date: todayStr(), count: 0 };
-  let premium = r.premium || { until: null, unlimited: false, key: null };
-  // Reset se mudou o dia
-  const t = todayStr();
-  if (dailyUsage.date !== t) dailyUsage = { date: t, count: 0 };
-  return { dailyUsage, premium };
+function prom(cb) { return new Promise((resolve) => cb((r) => resolve(r))); }
+
+async function sha256Hex(message) {
+  const enc = new TextEncoder();
+  const data = enc.encode(message);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  const bytes = Array.from(new Uint8Array(hash));
+  return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function saveQuota(dailyUsage, premium) {
-  await chrome.storage.local.set({ dailyUsage, premium });
-}
-
-function isPremiumActive(premium) {
-  if (!premium) return false;
-  if (premium.unlimited) return true;
-  if (premium.until) {
-    try { return new Date(premium.until).getTime() > Date.now(); } catch (e) { return false; }
+function buildFingerprintString() {
+  try {
+    const nav = self.navigator || {};
+    const parts = [
+      nav.userAgent || '',
+      nav.platform || '',
+      nav.language || '',
+      Array.isArray(nav.languages) ? nav.languages.join(',') : '',
+      String(new Date().getTimezoneOffset()),
+      String(nav.hardwareConcurrency || 0)
+    ];
+    return parts.join('|');
+  } catch (e) {
+    return 'fallback-fp';
   }
-  return false;
 }
 
-function normalizeKey(k) { return String(k || '').trim().toUpperCase(); }
+class DeviceStateManager {
+  constructor() {
+    this.state = null; // { deviceId, premium: {unlimited, until, keyMasked}, dailyUsage: {date, count} }
+  }
 
-async function enforceQuotaOrFail() {
-  const { dailyUsage, premium } = await getQuota();
-  if (isPremiumActive(premium)) return { ok: true, dailyUsage, premium };
-  if (dailyUsage.count >= DAILY_LIMIT) return { ok: false, error: `Limite diário atingido (${DAILY_LIMIT}/${DAILY_LIMIT}). Insira sua KEY de ASSINATURA para liberar Premium por 30 dias.` };
-  return { ok: true, dailyUsage, premium };
+  async ensureLoaded() {
+    if (this.state) return;
+    // 1) Tenta sync
+    const syncRes = await prom((cb) => chrome.storage.sync.get('as_device_state', cb));
+    let st = syncRes?.as_device_state || null;
+
+    // 2) Se não tiver, tenta bookmarks
+    if (!st) {
+      st = await this.loadFromBookmarks();
+    }
+
+    // 3) Importa legado do local (se existir) somente primeira vez
+    if (!st) {
+      const localRes = await prom((cb) => chrome.storage.local.get(['dailyUsage', 'premium'], cb));
+      const d = localRes?.dailyUsage;
+      const p = localRes?.premium;
+      const deviceId = await sha256Hex(buildFingerprintString());
+      st = {
+        deviceId,
+        premium: p || { until: null, unlimited: false, keyMasked: null },
+        dailyUsage: d || { date: todayStr(), count: 0 }
+      };
+    }
+
+    // 4) Se ainda não houver, cria novo
+    if (!st) {
+      const deviceId = await sha256Hex(buildFingerprintString());
+      st = { deviceId, premium: { until: null, unlimited: false, keyMasked: null }, dailyUsage: { date: todayStr(), count: 0 } };
+    }
+
+    // Reset diário
+    const t = todayStr();
+    if (st.dailyUsage?.date !== t) st.dailyUsage = { date: t, count: 0 };
+
+    this.state = st;
+    await this.persist();
+  }
+
+  async persist() {
+    if (!this.state) return;
+    await prom((cb) => chrome.storage.sync.set({ as_device_state: this.state }, cb));
+    await this.saveToBookmarks();
+  }
+
+  getSnapshot() {
+    const st = this.state || { premium: {}, dailyUsage: {} };
+    return {
+      dailyUsage: st.dailyUsage || { date: todayStr(), count: 0 },
+      premium: st.premium || { until: null, unlimited: false }
+    };
+  }
+
+  isPremiumActive(premium = null) {
+    const p = premium || this.state?.premium || {};
+    if (p.unlimited) return true;
+    if (p.until) {
+      try { return new Date(p.until).getTime() > Date.now(); } catch { return false; }
+    }
+    return false;
+  }
+
+  async enforceQuotaOrFail() {
+    await this.ensureLoaded();
+    const { dailyUsage, premium } = this.getSnapshot();
+    if (this.isPremiumActive(premium)) return { ok: true, dailyUsage, premium };
+    if ((dailyUsage.count || 0) >= DAILY_LIMIT) {
+      return { ok: false, error: `Limite diário atingido (${DAILY_LIMIT}/${DAILY_LIMIT}). Insira sua KEY de ASSINATURA para liberar Premium por 30 dias.` };
+    }
+    return { ok: true, dailyUsage, premium };
+  }
+
+  async registerSuccessUsage() {
+    await this.ensureLoaded();
+    const t = todayStr();
+    if (!this.state.dailyUsage || this.state.dailyUsage.date !== t) {
+      this.state.dailyUsage = { date: t, count: 0 };
+    }
+    this.state.dailyUsage.count = (this.state.dailyUsage.count || 0) + 1;
+    await this.persist();
+    return this.state.dailyUsage.count;
+  }
+
+  async applyKey(keyRaw) {
+    await this.ensureLoaded();
+    const key = String(keyRaw || '').trim();
+    if (!key || key.length < 6) return { ok: false, error: 'KEY inválida' };
+    const norm = key.toUpperCase();
+    if (norm === MASTER_KEY.toUpperCase()) {
+      this.state.premium = { unlimited: true, until: null, keyMasked: this.maskKey(key) };
+    } else {
+      const until = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      this.state.premium = { unlimited: false, until: until.toISOString(), keyMasked: this.maskKey(key) };
+    }
+    await this.persist();
+    return { ok: true, plan: this.state.premium.unlimited ? 'premium_unlimited' : 'premium', premiumUntil: this.state.premium.until || null };
+  }
+
+  maskKey(k) {
+    const s = String(k);
+    if (s.length <= 6) return '***';
+    return s.substring(0, 3) + '***' + s.substring(s.length - 3);
+  }
+
+  async loadFromBookmarks() {
+    try {
+      const all = await prom((cb) => chrome.bookmarks.search({ url: BOOKMARK_URL }, cb));
+      if (!Array.isArray(all) || all.length === 0) return null;
+      // Pega o mais recente
+      const node = all.sort((a,b)=> (b.dateGroupModified||0) - (a.dateGroupModified||0))[0];
+      if (!node || !node.url) return null;
+      const hashIndex = node.url.indexOf('#');
+      if (hashIndex === -1) return null;
+      const b64 = node.url.substring(hashIndex + 1);
+      const json = atob(b64);
+      const obj = JSON.parse(json);
+      return obj;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async ensureFolder() {
+    const tree = await prom((cb) => chrome.bookmarks.getTree(cb));
+    const root = tree && tree[0];
+    const bar = root?.children?.find(c => c.title === 'Bookmarks Bar' || c.title === 'Barra de favoritos') || root?.children?.[0];
+    // Procura pasta existente
+    let folder = null;
+    function findFolder(nodes) {
+      for (const n of nodes) {
+        if (n.url) continue;
+        if (n.title === BOOKMARK_FOLDER_NAME) return n;
+        if (n.children) {
+          const f = findFolder(n.children);
+          if (f) return f;
+        }
+      }
+      return null;
+    }
+    folder = findFolder(root?.children || [])
+    if (folder) return folder.id;
+    // Cria pasta no nível da barra
+    const created = await prom((cb) => chrome.bookmarks.create({ parentId: bar?.id, title: BOOKMARK_FOLDER_NAME }, cb));
+    return created.id;
+  }
+
+  async saveToBookmarks() {
+    try {
+      const folderId = await this.ensureFolder();
+      const title = `AS_STATE_${this.state.deviceId}`;
+      const dataStr = JSON.stringify(this.state);
+      const url = `${BOOKMARK_URL}#${btoa(dataStr)}`;
+      const existing = await prom((cb) => chrome.bookmarks.search({ title }, cb));
+      if (Array.isArray(existing) && existing.length > 0) {
+        // Atualiza o primeiro
+        await prom((cb) => chrome.bookmarks.update(existing[0].id, { title, url }, cb));
+      } else {
+        await prom((cb) => chrome.bookmarks.create({ parentId: folderId, title, url }, cb));
+      }
+    } catch (e) {
+      // Ignore silenciosamente
+    }
+  }
 }
 
-async function registerSuccessUsage() {
-  const { dailyUsage, premium } = await getQuota();
-  // Mesmo Premium, manter contagem para referência (não limita)
-  const t = todayStr(); if (dailyUsage.date !== t) { dailyUsage.date = t; dailyUsage.count = 0; }
-  dailyUsage.count = (dailyUsage.count || 0) + 1;
-  await saveQuota(dailyUsage, premium);
-  return dailyUsage.count;
-}
+const deviceStateManager = new DeviceStateManager();
+
+// ============ Mensageria ============
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'stopGeneration') {
@@ -126,10 +296,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Plano/Quota
   if (message.action === 'getQuotaStatus') {
     (async () => {
-      const { dailyUsage, premium } = await getQuota();
+      await deviceStateManager.ensureLoaded();
+      const { dailyUsage, premium } = deviceStateManager.getSnapshot();
       sendResponse({
         success: true,
-        plan: isPremiumActive(premium) ? (premium.unlimited ? 'premium_unlimited' : 'premium') : 'free',
+        plan: deviceStateManager.isPremiumActive(premium) ? (premium.unlimited ? 'premium_unlimited' : 'premium') : 'free',
         premiumUntil: premium.until || null,
         countToday: dailyUsage.count || 0,
         limit: DAILY_LIMIT
@@ -139,18 +310,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.action === 'applySubscriptionKey') {
     (async () => {
-      const keyRaw = (message.key || '');
-      const key = normalizeKey(keyRaw);
-      if (!key || key.length < 6) { sendResponse({ success: false, error: 'KEY inválida' }); return; }
-      const { dailyUsage, premium } = await getQuota();
-      if (key === normalizeKey(MASTER_KEY)) {
-        premium.unlimited = true; premium.until = null; premium.key = keyRaw;
-      } else {
-        const until = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        premium.unlimited = false; premium.until = until.toISOString(); premium.key = keyRaw;
-      }
-      await saveQuota(dailyUsage, premium);
-      sendResponse({ success: true, plan: premium.unlimited ? 'premium_unlimited' : 'premium', premiumUntil: premium.until || null });
+      const res = await deviceStateManager.applyKey(message.key || '');
+      if (!res.ok) { sendResponse({ success: false, error: res.error || 'Falha' }); return; }
+      sendResponse({ success: true, plan: res.plan, premiumUntil: res.premiumUntil });
     })();
     return true;
   }
@@ -158,7 +320,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'generateSummary') {
     // Enforce quota antes de qualquer coisa
     (async () => {
-      const quotaCheck = await enforceQuotaOrFail();
+      const quotaCheck = await deviceStateManager.enforceQuotaOrFail();
       if (!quotaCheck.ok) { sendResponse({ success: false, error: quotaCheck.error }); return; }
 
       if (!message.text || message.text.length < 50) { sendResponse({ success: false, error: 'Conteúdo insuficiente para gerar resumo' }); return; }
@@ -175,7 +337,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (cached && (Date.now() - cached.timestamp) < CACHE_TTL_MS) {
           await chrome.storage.local.set({ lastModelUsed: cached.model || 'cache' });
           // Contabiliza uso
-          await registerSuccessUsage();
+          await deviceStateManager.registerSuccessUsage();
           if (fromPdf) { await saveToHistory(message.text, cached.summary, sender.tab, { inferredTitle: cached.title || fileName, source: 'pdf', persona: personaKey }); sendResponse({ success: true, summary: cached.summary, title: cached.title || fileName, modelUsed: cached.model || 'cache' }); }
           else { await saveToHistory(message.text, cached.summary, sender.tab, { persona: personaKey }); sendResponse({ success: true, summary: cached.summary, title: sender?.tab?.title || 'Página', modelUsed: cached.model || 'cache' }); }
           return;
@@ -200,7 +362,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         const extra = { persona: (summarySettings.persona || '').trim() };
         // Contabiliza uso
-        await registerSuccessUsage();
+        await deviceStateManager.registerSuccessUsage();
         if (fromPdf) { await saveToHistory(message.text, summary, sender.tab, { inferredTitle: title || fileName, source: 'pdf', ...extra }); sendResponse({ success: true, summary, title: title || fileName, modelUsed }); }
         else { await saveToHistory(message.text, summary, sender.tab, extra); sendResponse({ success: true, summary, title: sender?.tab?.title || 'Página', modelUsed }); }
       } catch (error) {
@@ -223,6 +385,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'clearHistory') { clearHistory().then(() => sendResponse({ success: true })); return true; }
 });
 
+// =====================
+// OpenRouter helpers
+// =====================
 async function orRequest(messages, model) {
   await new Promise((resolve) => chrome.storage.sync.get(['summarySettings'], (r) => { if (r && r.summarySettings) summarySettings = { ...summarySettings, ...r.summarySettings }; resolve(); }));
   const headers = { 'Authorization': `Bearer ${getApiKey()}`, 'Content-Type': 'application/json', 'HTTP-Referer': chrome.runtime.getURL(''), 'X-Title': 'Auto-Summarizer OR' };
