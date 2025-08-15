@@ -541,6 +541,32 @@ async function generatePdfTitleAndSummaryOR(text) {
   return { title, summary: summary || out, model };
 }
 
+// DeepSeek direto (último fallback)
+async function deepseekDirect(messages, apiKey) {
+  const url = 'https://api.deepseek.com/v1/chat/completions';
+  const body = {
+    model: 'deepseek-chat',
+    messages: messages.map(m => ({ role: m.role, content: m.content })),
+    temperature: 0.7,
+    max_tokens: 1024
+  };
+  const headers = {
+    'Authorization': `Bearer ${apiKey}`,
+    'Content-Type': 'application/json'
+  };
+  const resp = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: currentAbortController?.signal });
+  if (!resp.ok) {
+    const detail = await resp.text();
+    const err = new Error(`DeepSeek API error: ${resp.status} - ${detail}`);
+    err.status = resp.status;
+    throw err;
+  }
+  const data = await resp.json();
+  const out = data?.choices?.[0]?.message?.content;
+  if (!out) throw new Error('Resposta inválida da DeepSeek');
+  return { text: out, model: 'deepseek-direct' };
+}
+
 function contentHash(str) { let h = 5381; for (let i = 0; i < str.length; i++) { h = ((h << 5) + h) + str.charCodeAt(i); h |= 0; } return `h${h}`; }
 async function getFromCache(key) { const res = await chrome.storage.local.get('summaryCache'); return (res.summaryCache || {})[key] || null; }
 async function saveToCache(key, value) { const res = await chrome.storage.local.get('summaryCache'); const cache = res.summaryCache || {}; cache[key] = value; const keys = Object.keys(cache); if (keys.length > 100) { let oldestKey = null, oldestTs = Infinity; for (const k of keys) { const ts = cache[k]?.timestamp || 0; if (ts < oldestTs) { oldestTs = ts; oldestKey = k; } } if (oldestKey) delete cache[oldestKey]; } await chrome.storage.local.set({ summaryCache: cache }); }
