@@ -120,17 +120,29 @@ function setupEventListeners() {
 function loadHistory() {
     chrome.runtime.sendMessage({ action: "getHistory" }, function(response) {
         if (chrome.runtime.lastError) {
-            console.error('Erro ao carregar histórico:', chrome.runtime.lastError);
-            showEmptyState();
+            console.error('Erro ao carregar histórico (mensagem):', chrome.runtime.lastError);
+            // Fallback: ler direto do storage local
+            chrome.storage.local.get('summaryHistory', (res) => {
+                const hist = res && res.summaryHistory ? res.summaryHistory : [];
+                allHistory = hist;
+                filteredHistory = [...allHistory];
+                if (filteredHistory.length === 0) showEmptyState(); else renderHistory();
+            });
             return;
         }
         
-        if (response && response.history) {
+        if (response && Array.isArray(response.history)) {
             allHistory = response.history;
             filteredHistory = [...allHistory];
-            renderHistory();
+            if (filteredHistory.length === 0) showEmptyState(); else renderHistory();
         } else {
-            showEmptyState();
+            // Fallback: ler direto do storage local
+            chrome.storage.local.get('summaryHistory', (res) => {
+                const hist = res && res.summaryHistory ? res.summaryHistory : [];
+                allHistory = hist;
+                filteredHistory = [...allHistory];
+                if (filteredHistory.length === 0) showEmptyState(); else renderHistory();
+            });
         }
     });
 }
