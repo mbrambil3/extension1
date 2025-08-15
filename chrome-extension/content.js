@@ -27,6 +27,28 @@ function quickCanStartExtraction() {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message && message.ping) { sendResponse({ pong: true }); return true; }
+  if (message.action === 'extractPdfText') {
+    (async () => {
+      try {
+        if (window.PDFViewerApplication && window.PDFViewerApplication.pdfDocument) {
+          const pdfDoc = window.PDFViewerApplication.pdfDocument;
+          let fullText = '';
+          const pages = Math.min(pdfDoc.numPages, 10);
+          for (let i = 1; i <= pages; i++) {
+            const page = await pdfDoc.getPage(i);
+            const textContent = await page.getTextContent();
+            fullText += textContent.items.map(it => it.str).join(' ') + '\n';
+          }
+          fullText = (fullText || '').trim();
+          if (fullText.length > 0) { sendResponse({ success: true, text: fullText }); return; }
+        }
+        sendResponse({ success: false, error: 'PDFViewerApplication não disponível.' });
+      } catch (e) {
+        sendResponse({ success: false, error: String(e && e.message || e) });
+      }
+    })();
+    return true;
+  }
   if (message.action === "generateSummary") {
     if (!isExtensionReady) {
       setTimeout(() => {

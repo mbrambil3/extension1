@@ -127,7 +127,6 @@ function setupEventListeners() {
             renderPlanStatus(quota);
             updatePremiumUI(quota);
             showToast('Premium ativado com sucesso!', 'success');
-            // Mantém a KEY à mostra somente se ainda não estiver premium (para correções), senão escondida por updatePremiumUI()
         });
     });
 
@@ -179,6 +178,17 @@ function setupEventListeners() {
 function isRestrictedUrl(url) { return url.startsWith('chrome://') || url.startsWith('chrome-extension://') || url.startsWith('edge://') || url.startsWith('about:') || url.startsWith('view-source:'); }
 async function injectContentScript(tabId) { try { await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] }); return true; } catch (e) { return false; } }
 
+async function requestPdfTextFromTab(tabId) {
+    return new Promise((resolve) => {
+        try {
+            chrome.tabs.sendMessage(tabId, { action: 'extractPdfText' }, (resp) => {
+                if (chrome.runtime.lastError) { resolve({ success: false, error: chrome.runtime.lastError.message }); return; }
+                resolve(resp || { success: false });
+            });
+        } catch (e) { resolve({ success: false, error: String(e) }); }
+    });
+}
+
 async function extractPdfFromUrl(url) {
     const pdfjs = window.pdfjsLib;
     if (!pdfjs) throw new Error('PDF.js não carregou');
@@ -228,7 +238,19 @@ function generateSummaryNow() {
 
         // Se for PDF no leitor nativo (URL .pdf)
         if (/\.pdf($|\?|#)/i.test(tab.url || '')) {
-            // Se for file://, verificar permissão de acesso a arquivos
+            // Primeiro, tente extrair diretamente do viewer (se disponível)
+            const resp = await requestPdfTextFromTab(tab.id);
+            if (resp && resp.success && resp.text && resp.text.length > 50) {
+                const payload = `Arquivo: ${fileNameFromUrl(tab.url)}\n\n${resp.text.substring(0, 50000)}`;
+                chrome.runtime.sendMessage({ action: 'generateSummary', text: payload, source: 'pdf', fileName: fileNameFromUrl(tab.url) }, (response) => {
+                    button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; if (stopBtn) stopBtn.style.display = 'none';
+                    if (chrome.runtime.lastError) { showToast('Erro: ' + chrome.runtime.lastError.message, 'error'); return; }
+                    if (response && response.success) { showToast('Resumo do PDF gerado (Histórico atualizado)', 'success'); }
+                    else { showToast(response?.error || 'Falha ao gerar resumo do PDF', 'error'); }
+                });
+                return;
+            }
+            // Se for file:// e não conseguiu extrair do viewer, verificar permissão
             if ((tab.url || '').startsWith('file://')) {
                 if (chrome.extension && chrome.extension.isAllowedFileSchemeAccess) {
                     chrome.extension.isAllowedFileSchemeAccess(async (allowed) => {
@@ -259,7 +281,7 @@ function generateSummaryNow() {
                     return;
                 }
             }
-            // PDFs http/https
+            // PDFs http/https como fallback
             try {
                 const text = await extractPdfFromUrl(tab.url);
                 if (!text || text.length < 50) throw new Error('Não foi possível extrair texto do PDF');
@@ -272,7 +294,6 @@ function generateSummaryNow() {
                 });
                 return;
             } catch (e) {
-                // Não cair no fluxo de content.js; mostrar erro direto
                 button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; if (stopBtn) stopBtn.style.display = 'none';
                 showToast('Falha ao processar PDF. Tente importar o arquivo pelo popup.', 'error');
                 return;
