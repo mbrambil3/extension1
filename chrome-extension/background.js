@@ -86,7 +86,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       try {
         const cooldown = await getCooldown();
         if (cooldown > Date.now()) { const secs = Math.ceil((cooldown - Date.now()) / 1000); sendResponse({ success: false, error: `Serviço temporariamente indisponível. Aguarde ${secs}s.` }); return; }
-        const key = contentHash(message.text);
+        const settingsKey = JSON.stringify({ persona: (summarySettings.persona||'assertivo'), language: summarySettings.language, detail: summarySettings.detailLevel });
+        const key = contentHash(settingsKey + '|' + message.text);
         const cached = await getFromCache(key);
         if (cached && (Date.now() - cached.timestamp) < CACHE_TTL_MS) {
           await chrome.storage.local.set({ lastModelUsed: cached.model || 'cache' });
