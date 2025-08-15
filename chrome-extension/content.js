@@ -107,6 +107,7 @@ function showLoadingPanel() {
     <div class="loading-container">
       <div class="loading-spinner"></div>
       <p>Gerando resumo...</p>
+      <button id="stop-autosummary" class="action-btn" style="margin-top:12px;">⏹️ Parar</button>
     </div>
   `;
   showPanel();
