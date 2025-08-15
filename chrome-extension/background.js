@@ -43,6 +43,12 @@ function getApiKey() {
   return user || DEFAULT_OR_API_KEY;
 }
 
+function getDeepseekApiKey() {
+  // Primeiro, do settings; se vazio, tenta storage local (retrocompatibilidade)
+  const user = (summarySettings.deepseekKey || '').trim();
+  return user;
+}
+
 function loadSettingsFromStorage(callback) {
   chrome.storage.sync.get(['extensionActive', 'summarySettings'], (result) => {
     if (result && typeof result.extensionActive !== 'undefined') isExtensionActive = result.extensionActive;
