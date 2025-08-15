@@ -11,10 +11,12 @@ let summarySettings = {
 // Plano/Quota
 const DAILY_LIMIT = 30; // free
 // Mantém a MASTER KEY atual até você nos enviar a nova. Podemos trocar depois rapidamente.
-// MASTER KEY obfuscada (reconstruída em runtime para desestimular inspeção)
-const _mk_b64 = ['TUE=','U1Q=','RVI=','LTY=','UHM=','dTI=','NTA=','MmM=','WEU=','RA=='];
-const _mk_dec = (s)=>{ try { return atob(s); } catch(e) { try { return Buffer.from(s,'base64').toString('utf-8'); } catch { return s; } } };
-const MASTER_KEY = _mk_b64.map(_mk_dec).join('');
+// MASTER KEY ofuscada (reconstruída em runtime). Técnica simples (XOR) para desestimular inspeção.
+const _mk_x = [
+  77 ^ 7, 65 ^ 7, 83 ^ 7, 84 ^ 7, 69 ^ 7, 82 ^ 7, 45 ^ 7, 54 ^ 7, 80 ^ 7,
+  115 ^ 7, 117 ^ 7, 50 ^ 7, 53 ^ 7, 48 ^ 7, 50 ^ 7, 99 ^ 7, 88 ^ 7, 69 ^ 7, 68 ^ 7
+];
+const MASTER_KEY = String.fromCharCode(..._mk_x.map(n => n ^ 7));
 
 // Controlador para permitir cancelar a geração em andamento
 let currentAbortController = null;
