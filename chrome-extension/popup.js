@@ -92,9 +92,7 @@ function setupEventListeners() {
     // Debounce no input da persona para evitar spam de toasts
     document.getElementById('persona').addEventListener('input', () => {
         clearTimeout(personaDebounceTimer);
-        personaDebounceTimer = setTimeout(() => {
-            saveSettingsSilent();
-        }, 500);
+        personaDebounceTimer = setTimeout(() => { saveSettingsSilent(); }, 500);
     });
 
     document.getElementById('applyKeyBtn').addEventListener('click', async () => {
@@ -105,7 +103,7 @@ function setupEventListeners() {
             const quota = await loadQuotaStatus();
             renderPlanStatus(quota);
             showToast('Premium ativado com sucesso!', 'success');
-            document.getElementById('subscriptionKey').value = '';
+            // Mantém a KEY visível no campo conforme solicitado
         });
     });
 
@@ -170,8 +168,8 @@ async function extractPdfFromUrl(url) {
         return (fullText || '').trim();
     } catch (e) {
         // Fallback: tentar baixar bytes e carregar por data
-        const resp = await fetch(url);
-        if (!resp.ok) throw new Error('Falha ao baixar PDF');
+        const resp = await fetch(url).catch(() => null);
+        if (!resp || !resp.ok) throw new Error('Falha ao baixar PDF');
         const buf = await resp.arrayBuffer();
         const doc = await pdfjs.getDocument({ data: new Uint8Array(buf), disableWorker: true }).promise;
         let fullText = '';
@@ -181,8 +179,13 @@ async function extractPdfFromUrl(url) {
     }
 }
 
-function fileNameFromUrl(url) {
-    try { const u = new URL(url); const p = u.pathname.split('/').pop() || 'documento.pdf'; return decodeURIComponent(p); } catch { return 'documento.pdf'; }
+function fileNameFromUrl(url) { try { const u = new URL(url); const p = u.pathname.split('/').pop() || 'documento.pdf'; return decodeURIComponent(p); } catch { return 'documento.pdf'; } }
+
+function openFileAccessHelp() {
+    const extId = chrome.runtime.id;
+    const url = `chrome://extensions/?id=${extId}`;
+    try { chrome.tabs.create({ url }); } catch (e) {}
+    showToast('Para resumir PDFs locais (file://), habilite "Permitir acesso a URLs de arquivos" na página da extensão e tente novamente.', 'warning');
 }
 
 function generateSummaryNow() {
@@ -199,24 +202,52 @@ function generateSummaryNow() {
         const tab = tabs[0];
         if (!tab) { button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; showToast('Nenhuma aba ativa encontrada', 'error'); return; }
 
-        // Se for PDF no leitor nativo (URL .pdf), extrair no próprio popup
+        // Se for PDF no leitor nativo (URL .pdf)
         if (/\.pdf($|\?|#)/i.test(tab.url || '')) {
+            // Se for file://, verificar permissão de acesso a arquivos
+            if ((tab.url || '').startsWith('file://')) {
+                if (chrome.extension && chrome.extension.isAllowedFileSchemeAccess) {
+                    chrome.extension.isAllowedFileSchemeAccess(async (allowed) => {
+                        if (!allowed) {
+                            button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; if (stopBtn) stopBtn.style.display = 'none';
+                            openFileAccessHelp();
+                            return;
+                        }
+                        try {
+                            const text = await extractPdfFromUrl(tab.url);
+                            if (!text || text.length < 50) throw new Error('Não foi possível extrair texto do PDF');
+                            const payload = `Arquivo: ${fileNameFromUrl(tab.url)}\n\n${text.substring(0, 50000)}`;
+                            chrome.runtime.sendMessage({ action: 'generateSummary', text: payload, source: 'pdf', fileName: fileNameFromUrl(tab.url) }, (response) => {
+                                button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; if (stopBtn) stopBtn.style.display = 'none';
+                                if (chrome.runtime.lastError) { showToast('Erro: ' + chrome.runtime.lastError.message, 'error'); return; }
+                                if (response && response.success) { showToast('Resumo do PDF gerado (Histórico atualizado)', 'success'); }
+                                else { showToast(response?.error || 'Falha ao gerar resumo do PDF', 'error'); }
+                            });
+                        } catch (e) {
+                            button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; if (stopBtn) stopBtn.style.display = 'none';
+                            showToast('Falha ao processar PDF local. Use Importar PDF no popup ou habilite acesso a arquivos.', 'error');
+                        }
+                    });
+                    return;
+                } else {
+                    button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; if (stopBtn) stopBtn.style.display = 'none';
+                    openFileAccessHelp();
+                    return;
+                }
+            }
+            // PDFs http/https
             try {
                 const text = await extractPdfFromUrl(tab.url);
                 if (!text || text.length < 50) throw new Error('Não foi possível extrair texto do PDF');
                 const payload = `Arquivo: ${fileNameFromUrl(tab.url)}\n\n${text.substring(0, 50000)}`;
                 chrome.runtime.sendMessage({ action: 'generateSummary', text: payload, source: 'pdf', fileName: fileNameFromUrl(tab.url) }, (response) => {
-                    button.classList.remove('loading');
-                    button.textContent = '🎯 Gerar Resumo Agora';
-                    if (stopBtn) stopBtn.style.display = 'none';
+                    button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; if (stopBtn) stopBtn.style.display = 'none';
                     if (chrome.runtime.lastError) { showToast('Erro: ' + chrome.runtime.lastError.message, 'error'); return; }
                     if (response && response.success) { showToast('Resumo do PDF gerado (Histórico atualizado)', 'success'); }
                     else { showToast(response?.error || 'Falha ao gerar resumo do PDF', 'error'); }
                 });
                 return;
-            } catch (e) {
-                // fallback para injeção normal
-            }
+            } catch (e) { /* segue fluxo normal abaixo */ }
         }
 
         if (isRestrictedUrl(tab.url || '')) { button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; showToast('Esta página não permite injeção de conteúdo (chrome://, etc.)', 'warning'); return; }

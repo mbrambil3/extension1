@@ -88,6 +88,8 @@ function isPremiumActive(premium) {
   return false;
 }
 
+function normalizeKey(k) { return String(k || '').trim().toUpperCase(); }
+
 async function enforceQuotaOrFail() {
   const { dailyUsage, premium } = await getQuota();
   if (isPremiumActive(premium)) return { ok: true, dailyUsage, premium };
@@ -137,14 +139,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.action === 'applySubscriptionKey') {
     (async () => {
-      const key = (message.key || '').trim();
+      const keyRaw = (message.key || '');
+      const key = normalizeKey(keyRaw);
       if (!key || key.length < 6) { sendResponse({ success: false, error: 'KEY inválida' }); return; }
       const { dailyUsage, premium } = await getQuota();
-      if (key === MASTER_KEY) {
-        premium.unlimited = true; premium.until = null; premium.key = key;
+      if (key === normalizeKey(MASTER_KEY)) {
+        premium.unlimited = true; premium.until = null; premium.key = keyRaw;
       } else {
         const until = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        premium.unlimited = false; premium.until = until.toISOString(); premium.key = key;
+        premium.unlimited = false; premium.until = until.toISOString(); premium.key = keyRaw;
       }
       await saveQuota(dailyUsage, premium);
       sendResponse({ success: true, plan: premium.unlimited ? 'premium_unlimited' : 'premium', premiumUntil: premium.until || null });
