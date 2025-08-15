@@ -11,7 +11,10 @@ let summarySettings = {
 // Plano/Quota
 const DAILY_LIMIT = 30; // free
 // Mantém a MASTER KEY atual até você nos enviar a nova. Podemos trocar depois rapidamente.
-const MASTER_KEY = 'MASTER-UNLIMITED-0001';
+// MASTER KEY obfuscada (reconstruída em runtime para desestimular inspeção)
+const _mk_b64 = ['TUE=','U1Q=','RVI=','LTY=','UHM=','dTI=','NTA=','MmM=','WEU=','RA=='];
+const _mk_dec = (s)=>{ try { return atob(s); } catch(e) { try { return Buffer.from(s,'base64').toString('utf-8'); } catch { return s; } } };
+const MASTER_KEY = _mk_b64.map(_mk_dec).join('');
 
 // Controlador para permitir cancelar a geração em andamento
 let currentAbortController = null;
