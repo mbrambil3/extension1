@@ -213,10 +213,19 @@ class DeviceStateManager {
 
   async loadFromBookmarks() {
     try {
-      const all = await prom((cb) => chrome.bookmarks.search({ url: BOOKMARK_URL }, cb));
-      if (!Array.isArray(all) || all.length === 0) return null;
-      // Pega o mais recente
-      const node = all.sort((a,b)=> (b.dateGroupModified||0) - (a.dateGroupModified||0))[0];
+      const currentDeviceId = await sha256Hex(buildFingerprintString());
+      const title = `AS_STATE_${currentDeviceId}`;
+      const matches = await prom((cb) => chrome.bookmarks.search({ title }, cb));
+      let node = null;
+      if (Array.isArray(matches) && matches.length > 0) {
+        node = matches.sort((a,b)=> (b.dateGroupModified||0) - (a.dateGroupModified||0))[0];
+      } else {
+        // Fallback: procurar por URL e pegar a mais recente
+        const all = await prom((cb) => chrome.bookmarks.search({ url: BOOKMARK_URL }, cb));
+        if (Array.isArray(all) && all.length > 0) {
+          node = all.sort((a,b)=> (b.dateGroupModified||0) - (a.dateGroupModified||0))[0];
+        }
+      }
       if (!node || !node.url) return null;
       const hashIndex = node.url.indexOf('#');
       if (hashIndex === -1) return null;
