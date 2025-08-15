@@ -25,16 +25,14 @@ let lastRequestTabId = null;
 
 const DEFAULT_OR_API_KEY = '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'; // chave fornecida pelo usuário
 const OR_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const PRIMARY_MODEL = 'deepseek/deepseek-r1-0528:free';
+const PRIMARY_MODEL = 'deepseek/deepseek-r1';
 const FALLBACK_MODELS = [
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'deepseek/deepseek-chat-v3-0324:free',
-  'qwen/qwen3-coder:free',
-  'deepseek/deepseek-r1:free',
-  'tngtech/deepseek-r1t2-chimera:free',
-  'google/gemini-2.0-flash-exp:free',
-  'openai/gpt-oss-20b:free',
-  'deepseek/deepseek-r1-distill-llama-70b:free'
+  'meta-llama/llama-3.3-70b-instruct',
+  'deepseek/deepseek-chat',
+  'qwen/qwen2.5-7b-instruct',
+  'google/gemini-2.0-flash-exp',
+  'openai/gpt-4o-mini',
+  'mistralai/mixtral-8x7b-instruct'
 ];
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
