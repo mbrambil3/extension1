@@ -62,6 +62,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ success: true, stopped: true });
     return true;
   }
+  if (message.action === 'stopGeneration') {
+    try { currentAbortController?.abort?.(); } catch (e) {}
+    sendResponse({ success: true, stopped: true });
+    return true;
+  }
   if (message.action === 'getSettings') {
     loadSettingsFromStorage(() => sendResponse({ isActive: isExtensionActive, settings: summarySettings }));
     return true;
