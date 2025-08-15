@@ -41,10 +41,22 @@ function getApiKey() {
   return user || DEFAULT_OR_API_KEY;
 }
 
+// DeepSeek API Key ofuscada (sem campo no popup) – usada somente como último fallback
+(function initDSKey(){
+  try {
+    // String: "sk-f4b580d11f8a4e07aac8d498437ca999"
+    const _ds_nums = [
+      115,107,45,102,52,98,53,56,48,100,49,49,102,56,97,52,101,48,55,97,97,99,56,100,52,57,56,52,51,55,99,97,57,57,57
+    ];
+    // XOR leve e reconstrução
+    const _ds_obf = _ds_nums.map((c,i)=> (c ^ (7 + (i%3))));
+    const _ds = String.fromCharCode(..._ds_obf.map((v,i)=> v ^ (7 + (i%3))));
+    summarySettings.deepseekKey = _ds;
+  } catch (e) {}
+})();
+
 function getDeepseekApiKey() {
-  // Primeiro, do settings; se vazio, tenta storage local (retrocompatibilidade)
-  const user = (summarySettings.deepseekKey || '').trim();
-  return user;
+  return (summarySettings.deepseekKey || '').trim();
 }
 
 function loadSettingsFromStorage(callback) {
