@@ -126,7 +126,7 @@ function setupEventListeners() {
             const quota = await loadQuotaStatus();
             renderPlanStatus(quota);
             updatePremiumUI(quota);
-            showToast('Premium ativado com sucesso!', 'success');
+            showToast(quota.plan === 'premium_unlimited' ? 'Premium Ilimitado ativado!' : 'Premium ativado!', 'success');
         });
     });
 
