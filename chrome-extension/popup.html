@@ -14,6 +14,16 @@
         </div>
         
         <div class="popup-content">
+            <!-- Resumo Automático acima dos botões -->
+            <div class="setting-item" style="margin-bottom:12px;">
+                <label class="toggle-label">
+                    <input type="checkbox" id="autoSummary" class="toggle-input">
+                    <span class="toggle-slider"></span>
+                    <span class="toggle-text">Resumo Automático</span>
+                </label>
+                <small class="setting-description">Gerar resumos automaticamente ao detectar artigos longos</small>
+            </div>
+
             <div class="action-group">
                 <div style="display:flex; gap:8px;">
                   <button id="generateNow" class="primary-btn" style="flex:1;">
@@ -36,14 +46,6 @@
             </div>
 
             <div class="setting-group" style="margin-top:16px;">
-                <div class="setting-item">
-                    <label class="toggle-label">
-                        <input type="checkbox" id="autoSummary" class="toggle-input">
-                        <span class="toggle-slider"></span>
-                        <span class="toggle-text">Resumo Automático</span>
-                    </label>
-                    <small class="setting-description">Gerar resumos automaticamente ao detectar artigos longos</small>
-                </div>
 
                 <div class="setting-item">
                     <label for="language" class="setting-label">Idioma do Resumo</label>
