@@ -5,7 +5,8 @@ let summarySettings = {
   language: 'pt',
   detailLevel: 'medium',
   persona: '',
-  openrouterKey: ''
+  openrouterKey: '',
+  deepseekKey: ''
 };
 
 // Plano/Quota
