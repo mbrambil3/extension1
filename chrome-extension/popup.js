@@ -236,8 +236,19 @@ function generateSummaryNow() {
         const tab = tabs[0];
         if (!tab) { button.classList.remove('loading'); button.textContent = '🎯 Gerar Resumo Agora'; showToast('Nenhuma aba ativa encontrada', 'error'); return; }
 
-        // Se for PDF no leitor nativo (URL .pdf)
+        // Se for PDF no leitor nativo (URL .pdf) ou PDF no viewer do Chrome com parâmetro src
+        const isChromePdfViewer = (tab.url || '').startsWith('chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai');
+        let pdfUrlCandidate = null;
         if (/\.pdf($|\?|#)/i.test(tab.url || '')) {
+            pdfUrlCandidate = tab.url;
+        } else if (isChromePdfViewer) {
+            try {
+                const u = new URL(tab.url);
+                const src = u.searchParams.get('src');
+                if (src) pdfUrlCandidate = decodeURIComponent(src);
+            } catch (e) {}
+        }
+        if (pdfUrlCandidate) {
             // Primeiro, tente extrair diretamente do viewer (se disponível)
             const resp = await requestPdfTextFromTab(tab.id);
             if (resp && resp.success && resp.text && resp.text.length > 50) {
