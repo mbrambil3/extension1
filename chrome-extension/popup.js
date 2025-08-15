@@ -126,6 +126,8 @@ function generateSummaryNow() {
             chrome.tabs.sendMessage(tab.id, { action: 'generateSummary', manual: true }, function(response) {
                 button.classList.remove('loading');
                 button.textContent = '🎯 Gerar Resumo Agora';
+                const stopBtn = document.getElementById('stopNow');
+                if (stopBtn) stopBtn.style.display = 'none';
                 if (chrome.runtime.lastError) { const msg = chrome.runtime.lastError.message || ''; if (msg.includes('Receiving end does not exist')) { showToast('Tentando preparar a página, clique novamente...', 'warning'); } else { showToast('Erro: ' + msg, 'error'); } return; }
                 if (response && response.received) { if (response.started) { showToast('Resumo sendo gerado...', 'success'); } else { showToast(response.errorMessage || 'Conteúdo não suportado para extração direta', 'warning'); } } else { showToast('A página pode não ter conteúdo suficiente', 'warning'); }
             });
