@@ -53,10 +53,13 @@ function setupEventListeners() {
     const stopBtn = document.getElementById('stopNow');
     if (stopBtn) {
         stopBtn.addEventListener('click', () => {
-            chrome.runtime.sendMessage({ action: 'stopGeneration' }, (resp) => {
-                showToast('Geração interrompida', 'warning');
-                stopBtn.style.display = 'none';
-            });
+            try {
+                chrome.runtime.sendMessage({ action: 'stopGeneration' }, () => {});
+            } catch (e) {}
+            showToast('Geração interrompida', 'warning');
+            stopBtn.style.display = 'none';
+            const btn = document.getElementById('generateNow');
+            if (btn) { btn.classList.remove('loading'); btn.textContent = '🎯 Gerar Resumo Agora'; }
         });
     }
 
