@@ -460,6 +460,16 @@ async function orWithFallback(messages) {
         }
       }
     }
+    // Último fallback: DeepSeek API direta se o usuário colocou a própria chave DeepSeek
+    const dsKey = getDeepseekApiKey();
+    if (dsKey) {
+      try {
+        const out = await deepseekDirect(messages, dsKey);
+        return out;
+      } catch (err) {
+        // cai no erro geral abaixo
+      }
+    }
     throw new Error('Serviço temporariamente indisponível após múltiplas tentativas. Tente novamente em instantes.');
   }
 }
