@@ -134,7 +134,15 @@ function showSummaryPanel(summary, modelUsed) {
     else if (low.includes('gpt')) modelShort = 'OpenAI';
     else if (low.includes('qwen')) modelShort = 'Qwen';
   } catch (e) {}
-  const modelInfo = modelShort ? ` • Modelo: ${escapeHtml(modelShort)}` : '';
+  // Acrescentar variação (r1, etc.) e se é free
+  let modelVariant = '';
+  let isFree = '';
+  try {
+    const raw = String(modelUsed || '');
+    if (/r1/i.test(raw)) modelVariant = ' r1';
+    if (/free/i.test(raw)) isFree = ' (free)';
+  } catch (e) {}
+  const modelInfo = modelShort ? ` • Modelo: ${escapeHtml(modelShort + modelVariant + isFree)}` : '';
   content.innerHTML = `
     <div class="summary-header">
       <h3>📄 Resumo Gerado</h3>
