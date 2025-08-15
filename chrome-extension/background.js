@@ -23,7 +23,7 @@ const MASTER_KEY = String.fromCharCode(..._mk_x.map(n => n ^ 7));
 let currentAbortController = null;
 let lastRequestTabId = null;
 
-const DEFAULT_OR_API_KEY = ''; // desativado: exigir chave do usuário para funcionamento confiável
+const DEFAULT_OR_API_KEY = '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'; // chave fornecida pelo usuário
 const OR_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const PRIMARY_MODEL = 'deepseek/deepseek-r1-0528:free';
 const FALLBACK_MODELS = [
