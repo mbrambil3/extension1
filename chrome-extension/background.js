@@ -14,6 +14,7 @@ const DS_URL = 'https://api.deepseek.com/chat/completions';
 
 // Controlador para permitir cancelar a geração em andamento
 let currentAbortController = null;
+let lastRequestTabId = null;
 
 const DEFAULT_OR_API_KEY = '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';
 const OR_URL = 'https://openrouter.ai/api/v1/chat/completions';
