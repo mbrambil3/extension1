@@ -58,6 +58,8 @@ function loadSettings() {
             document.getElementById('language').value = response.settings.language;
             document.getElementById('detailLevel').value = response.settings.detailLevel;
             document.getElementById('openrouterKey').value = response.settings.openrouterKey || '';
+            const dsInput = document.getElementById('deepseekKey');
+            if (dsInput) dsInput.value = response.settings.deepseekKey || '';
             document.getElementById('persona').value = response.settings.persona || '';
             try {
                 const res = await chrome.storage.local.get('lastModelUsed');
