@@ -179,7 +179,7 @@ class DeviceStateManager {
     const { dailyUsage, premium } = this.getSnapshot();
     if (this.isPremiumActive(premium)) return { ok: true, dailyUsage, premium };
     if ((dailyUsage.count || 0) >= DAILY_LIMIT) {
-      return { ok: false, error: `Limite diário atingido (${DAILY_LIMIT}/${DAILY_LIMIT}). Insira sua KEY de ASSINATURA para liberar Premium por 30 dias.` };
+      return { ok: false, error: `Limite diário atingido (${DAILY_LIMIT}/${DAILY_LIMIT}). Insira sua KEY de ASSINATURA válida para liberar o Premium.` };
     }
     return { ok: true, dailyUsage, premium };
   }
