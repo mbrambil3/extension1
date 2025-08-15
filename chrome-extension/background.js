@@ -163,13 +163,13 @@ async function orWithFallback(messages) {
   try {
     return await orRequest(messages, PRIMARY_MODEL);
   } catch (e) {
-    if (!shouldFallback(e)) throw e;
+    if (!shouldFallback(e) && e?.status !== 401) throw e; // se 401, ainda vamos tentar DeepSeek
     if (e && (e.status === 429 || e.status === 503)) await setCooldown(20000);
     for (const m of FALLBACK_MODELS) {
       try {
         return await orRequest(messages, m);
       } catch (err) {
-        if (shouldFallback(err)) {
+        if (shouldFallback(err) || err?.status === 401) {
           if (err && (err.status === 429 || err.status === 503)) await setCooldown(20000);
           continue;
         } else {
@@ -177,12 +177,8 @@ async function orWithFallback(messages) {
         }
       }
     }
-    // Tentar DeepSeek como último recurso (inclui casos 401 também)
-    try {
-      return await deepseekRequest(messages);
-    } catch (dsErr) {
-      throw dsErr;
-    }
+    // OpenRouter esgotou: acionar DeepSeek como último fallback
+    return await deepseekRequest(messages);
   }
 }
 
