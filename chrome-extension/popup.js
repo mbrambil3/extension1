@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 const CHECKOUT_URL = 'https://lastlink.com/p/C55E28191/checkout-payment';
 const WHATSAPP_LINK = 'https://wa.me/message/TUOHH5MFFZQSL1';
-const BACKEND_BASE = 'https://pdf-reader-plus.preview.emergentagent.com';
+const BACKEND_BASE = 'https://summary-pro.preview.emergentagent.com';
 const CLAIM_URL = BACKEND_BASE + '/api/premium/claim'; // não usado mais
 
 async function loadQuotaStatus() {
