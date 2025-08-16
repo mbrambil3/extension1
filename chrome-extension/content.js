@@ -148,7 +148,7 @@ function generateSummary(text, extra = {}) {
   });
 }
 
-function escapeHtml(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;/g,).replace(/>/g, '&gt;'); }
+function escapeHtml(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
 function formatStructuredSummary(text) {
   const lines = (text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
