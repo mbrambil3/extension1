@@ -62,11 +62,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     const check = quickCanStartExtraction();
     if (!check.canStart) {
-      // Não abrir painel de erro; apenas responder com orientação
       sendResponse({ received: true, started: false, errorMessage: check.reason });
       return true;
     }
-    if (message.manual || !sidePanelVisible) { detectAndExtractContent(true); }
+    if (message.manual || !sidePanelVisible) { detectAndExtractContent(true, check.mode); }
     sendResponse({ received: true, started: true });
     return true;
   }
