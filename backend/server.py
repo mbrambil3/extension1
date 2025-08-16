@@ -230,6 +230,13 @@ async def admin_revoke_keys(request: Request, body: AdminRevokeKeyRequest):
     return AdminRevokeKeyResponse(revoked_count=result.modified_count)
 
 
+
+@api_router.post('/admin/keys/revoke_all', response_model=AdminRevokeKeyResponse)
+async def admin_revoke_all(request: Request):
+    _require_admin(request)
+    result = await db.premium_keys.update_many({'status': 'active'}, { '$set': { 'status': 'revoked', 'updated_at': datetime.utcnow() } })
+    return AdminRevokeKeyResponse(revoked_count=result.modified_count)
+
 # Include the router in the main app
 app.include_router(api_router)
 
