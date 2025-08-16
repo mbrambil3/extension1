@@ -129,59 +129,35 @@ function isValidEmail(email) {
     return /.+@.+\..+/.test(s);
 }
 
-// Tenta detectar automaticamente o e-mail na aba ativa (ex.: página de confirmação da Lastlink)
+// Detecta automaticamente o e-mail na aba ativa (página de confirmação da Lastlink)
 async function detectEmailFromActiveTab() {
     return new Promise((resolve) => {
         try {
             chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
                 const tab = tabs && tabs[0];
-                if (!tab) return resolve(null);
-                const href = (tab.url && typeof tab.url === 'string') ? tab.url : '';
-                if (!href) return resolve(null);
-                try { const u = new URL(href); const email = u.searchParams.get('email'); if (email && /.+@.+\..+/.test(email)) return resolve(email); } catch (e) {}
-                resolve(null);
+                if (!tab || !tab.id) return resolve(null);
+                // Usamos executeScript para ler location.href sem precisar da permissão "tabs"
+                chrome.scripting.executeScript(
+                  { target: { tabId: tab.id }, func: () => location.href },
+                  (results) => {
+                      try {
+                          const href = results && results[0] && results[0].result ? String(results[0].result) : '';
+                          if (!href) return resolve(null);
+                          try {
+                              const u = new URL(href);
+                              const email = u.searchParams.get('email');
+                              if (email && /.+@.+\..+/.test(email)) return resolve(email);
+                          } catch (e) {}
+                          resolve(null);
+                      } catch (e) { resolve(null); }
+                  }
+                );
             });
         } catch (e) { resolve(null); }
     });
 }
 
-// Busca também em outras abas do navegador (ex.: se a confirmação ficou em outra aba)
-async function detectEmailFromAnyTab() {
-    return new Promise((resolve) => {
-        try {
-            chrome.tabs.query({}, (tabs) => {
-                const all = Array.isArray(tabs) ? tabs : [];
-                const candidates = all.filter(t => typeof t.url === 'string' && /lastlink\.com\/.*(payment-success|checkout|order|purchase)/i.test(t.url));
-                if (candidates.length === 0) return resolve(null);
-                let resolved = false;
-                let pending = candidates.length;
-                for (const t of candidates) {
-                    chrome.scripting.executeScript(
-                        { target: { tabId: t.id }, func: () => location.href },
-                        (results) => {
-                            pending--;
-                            try {
-                                const href = results && results[0] && results[0].result ? String(results[0].result) : '';
-                                if (href) {
-                                    try {
-                                        const u = new URL(href);
-                                        const email = u.searchParams.get('email');
-                                        if (!resolved && email && /.+@.+\..+/.test(email)) {
-                                            resolved = true;
-                                            return resolve(email);
-                                        }
-                                    } catch (e) {}
-                                }
-                            } catch (e) {}
-                            if (pending === 0 && !resolved) resolve(null);
-                        }
-                    );
-                }
-            });
-        } catch (e) { resolve(null); }
-    });
-
-
+async function claimByEmail(email) {
     try {
         const resp = await fetch(CLAIM_URL, {
             method: 'POST',
@@ -229,9 +205,6 @@ function setupEventListeners() {
             // Verificação automática na aba ativa (página de confirmação)
             let detectedEmail = null;
             try { detectedEmail = await detectEmailFromActiveTab(); } catch (e) { detectedEmail = null; }
-            if (!detectedEmail) {
-                try { detectedEmail = await detectEmailFromAnyTab(); } catch (e) { detectedEmail = null; }
-            }
             if (detectedEmail) {
                 if (!email) {
                     email = detectedEmail;
@@ -329,7 +302,7 @@ function setupEventListeners() {
                 showToast('Importando PDF... O resumo aparecerá no Histórico em instantes.', 'success');
                 chrome.runtime.sendMessage({ action: 'generateSummary', text: payload, source: 'pdf', fileName: file.name }, (response) => {
                     if (chrome.runtime.lastError) { showToast('Erro: ' + chrome.runtime.lastError.message, 'error'); return; }
-                    if (response &amp;&amp; response.success) { showToast('PDF enviado. Abra o Histórico para acompanhar.', 'success'); }
+                    if (response && response.success) { showToast('PDF enviado. Abra o Histórico para acompanhar.', 'success'); }
                     else { showToast(response?.error || 'Falha ao iniciar resumo do PDF', 'error'); }
                 });
             } catch (err) { console.error('Falha ao processar PDF:', err); showToast('Falha ao processar PDF: ' + (err?.message || err), 'error'); }
