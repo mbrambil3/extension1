@@ -243,7 +243,7 @@ class DeviceStateManager {
     try {
       const valid = await validateKeyServer(key);
       if (valid) {
-        this.state.premium = { unlimited: false, until: null, keyMasked: this.maskKey(key), keyObf: obfuscateKey(key) };
+        this.state.premium = { unlimited: true, until: null, keyMasked: this.maskKey(key), keyObf: obfuscateKey(key) };
         await this.persist();
         return { ok: true, plan: 'premium', premiumUntil: null };
       }
