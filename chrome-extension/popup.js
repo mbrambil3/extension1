@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 const CHECKOUT_URL = 'https://lastlink.com/p/C55E28191/checkout-payment';
-const BACKEND_BASE = 'https://readwise-chrome.preview.emergentagent.com';
+const BACKEND_BASE = 'https://premium-unlock-3.preview.emergentagent.com';
 const CLAIM_URL = BACKEND_BASE + '/api/premium/claim';
 
 async function loadQuotaStatus() {

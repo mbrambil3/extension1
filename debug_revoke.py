@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv('/app/frontend/.env')
 
 # Configuration
-BASE_URL = os.getenv('REACT_APP_BACKEND_URL', 'https://readwise-chrome.preview.emergentagent.com')
+BASE_URL = os.getenv('REACT_APP_BACKEND_URL', 'https://premium-unlock-3.preview.emergentagent.com')
 API_BASE = f"{BASE_URL}/api"
 WEBHOOK_SECRET = "0e8cafc1171045df9b30c23db25a53df"
 
