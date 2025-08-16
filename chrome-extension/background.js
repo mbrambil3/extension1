@@ -371,7 +371,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({
         success: true,
         plan: deviceStateManager.isPremiumActive(premium) ? (premium.unlimited ? 'premium_unlimited' : 'premium') : 'free',
-        premiumUntil: premium.until || null,
+        premiumUntil: premium.until ? (typeof premium.until === 'string' ? premium.until : (new Date(premium.until)).toISOString()) : null,
         countToday: dailyUsage.count || 0,
         limit: DAILY_LIMIT
       });
