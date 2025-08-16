@@ -5,12 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Auto-Summarizer</title>
     <link rel="stylesheet" href="popup.css">
+    <style>
+      /* leve diferença de cores entre os botões Assinar e Ativar */
+      .btn-subscribe { background: #2563eb; color: #fff; }
+      .btn-subscribe:hover { background: #1d4ed8; }
+      .btn-activate { background: #f1f5f9; color: #0f172a; }
+      .btn-activate.disabled { opacity: 0.6; cursor: not-allowed; }
+      .hidden { display: none !important; }
+    </style>
 </head>
 <body>
     <div class="popup-container">
         <div class="popup-header">
             <h2>📄 Auto-Summarizer</h2>
-            <p class="version">v1.0.4</p>
+            <p class="version">v1.0.6</p>
         </div>
         
         <div class="popup-content">
@@ -73,11 +81,16 @@
                 <div class="setting-item" style="border-top:1px solid #e2e8f0; margin-top:8px; padding-top:8px;">
                     <label class="setting-label">Plano e Limites</label>
                     <div id="planStatus" class="setting-description">Plano: Free • Hoje: 0/30</div>
-                    <div style="display:flex; gap:8px; margin-top:6px; align-items:center;">
-                        <button id="applyKeyBtn" class="secondary-btn" style="flex:0 0 auto;">Ativar Premium</button>
+                    
+                    <div style="display:flex; flex-direction:column; gap:8px; margin-top:6px; align-items:stretch;">
+                        <!-- Novo botão Assinar Premium (some quando Premium) -->
+                        <button id="subscribeBtn" class="secondary-btn btn-subscribe" style="flex:0 0 auto;">Assinar Premium</button>
+                        <!-- Botão Ativar Premium existente -->
+                        <button id="applyKeyBtn" class="secondary-btn btn-activate" style="flex:0 0 auto;">Ativar Premium</button>
                     </div>
+                    
                     <input id="subscriptionKey" type="text" class="setting-select" placeholder="KEY de ASSINATURA" style="width:100%; margin-top:8px; height:38px; border-radius:8px;" />
-                    <small id="subscriptionHint" class="setting-description" style="display:block; margin-left:0;">Insira sua KEY para liberar Premium por 30 dias.</small>
+                    <small id="subscriptionHint" class="setting-description" style="display:block; margin-left:0;">Insira sua KEY para liberar Premium.</small>
                 </div>
 
                 <details id="advancedOptions">
