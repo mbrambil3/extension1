@@ -568,6 +568,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // =====================
 // OpenRouter helpers
 // =====================
+function getMaxTokens() {
+  // Escalonar orçamento por nível; Profundo recebe mais tokens para permitir expansão dos subtópicos
+  switch ((summarySettings.detailLevel || '').toLowerCase()) {
+    case 'short': return 600;
+    case 'medium': return 900;
+    case 'long': return 1400;
+    case 'profundo': return 2200;
+    default: return 1000;
+  }
+}
+
 async function orRequest(messages, model) {
   await new Promise((resolve) => chrome.storage.sync.get(['summarySettings'], (r) => { if (r && r.summarySettings) summarySettings = { ...summarySettings, ...r.summarySettings }; resolve(); }));
   const headers = { 'Authorization': `Bearer ${getApiKey()}`, 'Content-Type': 'application/json', 'HTTP-Referer': chrome.runtime.getURL(''), 'X-Title': 'Auto-Summarizer OR' };
@@ -626,31 +637,34 @@ async function orWithFallback(messages) {
 }
 
 function buildSummaryInstructions(text) {
+  const level = (summarySettings.detailLevel || '').toLowerCase();
   let detailPrompt = '';
-  switch (summarySettings.detailLevel) {
+  switch (level) {
     case 'short': detailPrompt = 'Crie um resumo muito breve (máximo 3 pontos principais).'; break;
     case 'medium': detailPrompt = 'Crie um resumo conciso com os pontos principais (5-7 pontos).'; break;
     case 'long': detailPrompt = 'Crie um resumo detalhado e abrangente, incluindo seções e subtópicos relevantes.'; break;
-    case 'profundo': detailPrompt = 'Crie um resumo EXTREMAMENTE PROFUNDO, LONGO e PRECISO. Estruture em seções claras: (1) Contexto e objetivo; (2) Metodologia (amostra, desenho, instrumentos, análises); (3) Resultados (com números‑chave); (4) Discussão (interpretações e limitações); (5) Implicações práticas e teóricas; (6) Conclusões; (7) Palavras‑chave. Se você listar subtópicos em qualquer seção, EM SEGUIDA EXPANDA CADA SUBTÓPICO com 1‑2 parágrafos explicativos baseados no texto, incluindo números, exemplos e nuances. Evite superficialidade, não invente dados e mantenha o tom/persona definidos.'; break;
+    case 'profundo':
+      detailPrompt = 'Crie um resumo EXTREMAMENTE PROFUNDO, LONGO e PRECISO. Estruture em seções claras: (1) Contexto e objetivo; (2) Metodologia (amostra, desenho, instrumentos, análises); (3) Resultados (com números‑chave); (4) Discussão (interpretações e limitações); (5) Implicações práticas e teóricas; (6) Conclusões; (7) Palavras‑chave.';
+      break;
   }
   // A personalidade não pode ampliar tamanho/complexidade além do nível escolhido.
   // Use persona apenas para tom/linguagem, sem alterar profundidade.
   const persona = (summarySettings.persona || '').trim();
   const styleLine = persona ? `Adote apenas o TOM/ESTILO a seguir, sem aumentar profundidade além do nível escolhido: ${persona}.` : '';
-  return `${detailPrompt} do seguinte texto em ${summarySettings.language === 'pt' ? 'português' : 'inglês'}.${styleLine ? `\n${styleLine}` : ''}
 
-Regras de formatação (siga exatamente):
-1) Produza de 3 a 8 pontos principais como lista numerada (1., 2., 3., ...)
-2) Em cada item, comece com um tópico curto (3–8 palavras), seguido de dois pontos e, em seguida, uma explicação breve em uma única frase
-3) Quando for útil, adicione 1–3 subitens iniciados com "- " (hífen e espaço), cada um curto
-4) Não use markdown com **asteriscos**, títulos ou blocos de código
-5) Não envolva a resposta em blocos de código; retorne apenas texto simples estruturado
+  // Regras de formatação padrão (para short/medium/long)
+  const defaultRules = `\n\nRegras de formatação (siga exatamente):\n1) Produza de 3 a 8 pontos principais como lista numerada (1., 2., 3., ...)\n2) Em cada item, comece com um tópico curto (3–8 palavras), seguido de dois pontos e, em seguida, uma explicação breve em uma única frase\n3) Quando for útil, adicione 1–3 subitens iniciados com "- " (hífen e espaço), cada um curto\n4) Não use markdown com **asteriscos**, títulos ou blocos de código\n5) Não envolva a resposta em blocos de código; retorne apenas texto simples estruturado`;
 
-Texto a resumir:
-${text.substring(0, 50000)}`;
+  // Regras especiais para PROFUNDO: listar e em seguida expandir cada subitem
+  const deepRules = `\n\nRegras do modo PROFUNDO (siga exatamente):\nA) Primeiro, liste os pontos principais como em uma lista numerada (1., 2., 3., ...), podendo incluir subitens com "- ".\nB) EM SEGUIDA, crie uma seção chamada EXPANSÕES e EXPANDA CADA SUBITEM listado anteriormente com 1–2 parágrafos explicativos, baseados no texto, com números, exemplos e nuances quando existirem.\nC) NÃO invente dados; se não houver números disponíveis, explique qualitativamente.\nD) Mantenha o tom/persona definidos sem aumentar a profundidade além do nível PROFUNDO.\nE) Retorne apenas texto simples (sem markdown de títulos), usando a etiqueta literal "EXPANSÕES:" para iniciar a parte de aprofundamento.`;
+
+  const rules = level === 'profundo' ? deepRules : defaultRules;
+
+  return `${detailPrompt} do seguinte texto em ${summarySettings.language === 'pt' ? 'português' : 'inglês'}.${styleLine ? `\n${styleLine}` : ''}${rules}\n\nTexto a resumir:\n${text.substring(0, 50000)}`;
 }
 
 async function generateSummaryOR(text) {
+  const level = (summarySettings.detailLevel || '').toLowerCase();
   const persona = (summarySettings.persona || '').trim();
   const sys = persona
     ? `Você é um assistente de resumo. Mantenha o TOM/ESTILO indicado, mas NÃO aumente a complexidade/tamanho além do nível de detalhe selecionado: ${persona}. Siga as regras de formatação.`
@@ -659,16 +673,41 @@ async function generateSummaryOR(text) {
     { role: 'system', content: sys },
     { role: 'user', content: buildSummaryInstructions(text) }
   ];
-  return await orWithFallback(messages);
+  const result = await orWithFallback(messages);
+
+  // Em Profundo, garantir que EXPANSÕES existam e não estejam vazias
+  if (level === 'profundo') {
+    const hasExp = /\bEXPANSÕES\s*:/i.test(result.text);
+    if (!hasExp) {
+      // Pós-processo mínimo: se não houver, pedir uma segunda rodada curta só para expandir
+      try {
+        const prompt2 = `A seguir está um RESUMO com subitens. Crie apenas a seção EXPANSÕES, expandindo cada subitem com 1–2 parágrafos, sem repetir o resumo inicial.\n\nRESUMO:\n${result.text.substring(0, 45000)}`;
+        const messages2 = [
+          { role: 'system', content: sys },
+          { role: 'user', content: prompt2 }
+        ];
+        const r2 = await orWithFallback(messages2);
+        result.text = `${result.text}\n\nEXPANSÕES:\n${r2.text}`;
+      } catch (e) {}
+    }
+  }
+  return result;
 }
 
 async function generatePdfTitleAndSummaryOR(text) {
+  const level = (summarySettings.detailLevel || '').toLowerCase();
   const persona = (summarySettings.persona || '').trim();
   const styleLine = persona ? `\nInstrua-se a escrever exatamente no seguinte estilo/persona (sem quebrar as regras de formatação): ${persona}.` : '';
   const sys = persona
     ? `Você é um assistente de resumo. Mantenha o TOM/ESTILO indicado, mas NÃO aumente a complexidade/tamanho além do nível de detalhe selecionado: ${persona}. Siga as regras de formatação.`
     : 'Você é um assistente de resumo que retorna lista numerada com tópicos curtos e subitens quando necessário.';
-  const prompt = `Você receberá o conteúdo textual de um arquivo PDF. Gere:\n- TITLE: um título curto (no máximo 10 palavras), sem aspas/markdown\n- SUMMARY: um resumo estruturado conforme regras abaixo${styleLine}\n\nRegras do SUMMARY (siga exatamente):\n1) 3 a 8 itens numerados (1., 2., ...)\n2) Cada item: um tópico curto (3–8 palavras) seguido de dois pontos e uma frase breve\n3) Subitens opcionais iniciados com "- " (1–3)\n\nResponda estritamente neste formato:\nTITLE: <título curto>\nSUMMARY:\n1. <tópico curto>: <frase>\n- <subitem opcional>\n2. ...\n\nConteúdo (parcial):\n${text.substring(0, 50000)}`;
+
+  // Prompt diferente para PDF, inclusive com EXPANSÕES em Profundo
+  const base = `Você receberá o conteúdo textual de um arquivo PDF. Gere:\n- TITLE: um título curto (no máximo 10 palavras), sem aspas/markdown\n- SUMMARY: um resumo estruturado conforme regras abaixo${styleLine}`;
+  const rulesDefault = `\n\nRegras do SUMMARY (siga exatamente):\n1) 3 a 8 itens numerados (1., 2., ...)\n2) Cada item: um tópico curto (3–8 palavras) seguido de dois pontos e uma frase breve\n3) Subitens opcionais iniciados com "- " (1–3)`;
+  const rulesDeep = `\n\nRegras do SUMMARY no modo PROFUNDO:\n1) Faça como acima (itens numerados, subitens com "- ")\n2) Depois, crie a seção EXPANSÕES e expanda cada subitem com 1–2 parágrafos detalhados, sem inventar dados`;
+  const prompt = `${base}${level === 'profundo' ? rulesDeep : rulesDefault}\n\nResponda estritamente neste formato:\nTITLE: <título curto>\nSUMMARY:\n1. <tópico curto>: <frase>\n- <subitem opcional>\n2. ...${level === 'profundo' ? '\n\nEXPANSÕES:\n<expansões de cada subitem>' : ''}\n\nConteúdo (parcial):\n${text.substring(0, 50000)}`;
+
   const messages = [ { role: 'system', content: sys }, { role: 'user', content: prompt } ];
   const { text: out, model } = await orWithFallback(messages);
   let title = null, summary = null;
