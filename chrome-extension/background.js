@@ -666,7 +666,7 @@ async function generatePdfTitleAndSummaryOR(text) {
   const persona = (summarySettings.persona || '').trim();
   const styleLine = persona ? `\nInstrua-se a escrever exatamente no seguinte estilo/persona (sem quebrar as regras de formatação): ${persona}.` : '';
   const sys = persona
-    ? `Você é um assistente de resumo. Mantenha exatamente o estilo/persona a seguir durante toda a resposta: ${persona}. Siga as regras de formatação.`
+    ? `Você é um assistente de resumo. Mantenha o TOM/ESTILO indicado, mas NÃO aumente a complexidade/tamanho além do nível de detalhe selecionado: ${persona}. Siga as regras de formatação.`
     : 'Você é um assistente de resumo que retorna lista numerada com tópicos curtos e subitens quando necessário.';
   const prompt = `Você receberá o conteúdo textual de um arquivo PDF. Gere:\n- TITLE: um título curto (no máximo 10 palavras), sem aspas/markdown\n- SUMMARY: um resumo estruturado conforme regras abaixo${styleLine}\n\nRegras do SUMMARY (siga exatamente):\n1) 3 a 8 itens numerados (1., 2., ...)\n2) Cada item: um tópico curto (3–8 palavras) seguido de dois pontos e uma frase breve\n3) Subitens opcionais iniciados com "- " (1–3)\n\nResponda estritamente neste formato:\nTITLE: <título curto>\nSUMMARY:\n1. <tópico curto>: <frase>\n- <subitem opcional>\n2. ...\n\nConteúdo (parcial):\n${text.substring(0, 50000)}`;
   const messages = [ { role: 'system', content: sys }, { role: 'user', content: prompt } ];
