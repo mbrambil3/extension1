@@ -156,8 +156,8 @@ async def validate_key(req: ValidateKeyRequest):
     except Exception:
         exp = None
     if exp and datetime.utcnow() >= exp:
-        return ValidateKeyResponse(valid=False, plan='free', status='expired', expires_at=exp)
-    return ValidateKeyResponse(valid=True, plan='premium', status='active', expires_at=exp)
+        return ValidateKeyResponse(valid=False, plan='free', status='expired', expires_at=exp, expires_at_ms=int(exp.timestamp()*1000) if exp else None)
+    return ValidateKeyResponse(valid=True, plan='premium', status='active', expires_at=exp, expires_at_ms=int(exp.timestamp()*1000) if exp else None)
 
 
 # ============ Admin APIs ============
