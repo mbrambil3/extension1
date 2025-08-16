@@ -618,7 +618,13 @@ async function validateKeyServer(key) {
     if (!resp.ok) return { ok: false };
     const data = await resp.json();
     const ms = (typeof data?.expires_at_ms === 'number' && data.expires_at_ms > 0) ? data.expires_at_ms : null;
-    const iso = data?.expires_at || (ms ? new Date(ms).toISOString() : null);
+    let iso = null;
+    if (ms) {
+      iso = new Date(ms).toISOString();
+    } else if (data?.expires_at) {
+      const d = new Date(data.expires_at);
+      iso = isNaN(d.getTime()) ? null : d.toISOString();
+    }
     return { ok: !!(data && data.valid === true && data.plan === 'premium'), expires_at: iso, raw: data };
   } catch (e) { return { ok: false, error: String(e?.message || e) }; }
 }
