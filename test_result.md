@@ -155,8 +155,10 @@ test_plan:
 agent_communication:
   - agent: "main"
     message: "Backend implementado e testado com sucesso. Aguardando confirmação para adaptar a extensão: (1) adicionar botão de checkout, (2) remover MASTER_KEY local, (3) validar KEY no servidor e refletir revogações."
+  - agent: "testing"
+    message: "Re-testei backend após ajustes de robustez. Cenários específicos da review request funcionam perfeitamente: autenticação Bearer e secret no corpo, criação de KEY ativa, revogação por refund, e claim retornando 404 após revogação. Sistema robusto e funcionando conforme especificado."
 
-user_problem_statement: "Teste os novos endpoints do backend e o webhook: POST /api/webhooks/lastlink, POST /api/premium/claim, POST /api/premium/keys/validate"
+user_problem_statement: "Re-testar backend após ajustes de robustez em extração de secret e normalização de e-mail"
 
 backend:
   - task: "Webhook Authentication"
