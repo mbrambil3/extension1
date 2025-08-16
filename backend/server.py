@@ -102,7 +102,7 @@ def _extract_header_secret(request: Request) -> Optional[str]:
 
 def _event_uid(payload: Dict[str, Any]) -> str:
     # Prefer strong identifiers from provider
-    for k in ['id', 'event_id', 'delivery_id', 'webhook_id', 'pedido_id', 'order_id']:
+    for k in ['id', 'event_id', 'delivery_id', 'webhook_id', 'pedido_id', 'order_id', 'subscriptionId', 'subscription_id']:
         v = payload.get(k)
         if isinstance(v, (str, int)) and str(v):
             return f"ll_{k}_{v}"
