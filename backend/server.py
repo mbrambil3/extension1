@@ -182,7 +182,7 @@ def _extract_order_id(payload: Dict[str, Any]) -> Optional[str]:
 def _extract_product_code(payload: Dict[str, Any]) -> Optional[str]:
     paths = [
         ['product_code'], ['produto', 'codigo'], ['product', 'code'], ['plan', 'code'], ['data', 'product_code'],
-        ['checkout', 'code']
+        ['checkout', 'code'], ['plan', 'id'], ['data', 'plan', 'id']
     ]
     for p in paths:
         cur: Any = payload
