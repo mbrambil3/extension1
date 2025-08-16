@@ -391,7 +391,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       chrome.storage.local.get('as_sub_key_raw', (r) => {
         const raw = r && r.as_sub_key_raw ? String(r.as_sub_key_raw).trim() : '';
         const proceed = () => loadSettingsFromStorage(() => sendResponse({ isActive: isExtensionActive, settings: summarySettings }));
-        if (!raw) { proceed(); return; }
+        if (!raw) {
+          try {
+            deviceStateManager.ensureLoaded().then(async () => {
+              try {
+                const snap = deviceStateManager.getSnapshot();
+                const prem = snap && snap.premium ? snap.premium : {};
+                const active = deviceStateManager.isPremiumActive(prem);
+                if (active) {
+                  // Sem a KEY salva, não há como revalidar: por segurança, cair para Free
+                  deviceStateManager.state.premium = { until: null, unlimited: false, keyMasked: null };
+                  await deviceStateManager.persist();
+                }
+              } catch (e) {}
+              proceed();
+            });
+          } catch (e) { proceed(); }
+          return;
+        }
         validateKeyServer(raw)
           .then(async (v) => {
             try {
