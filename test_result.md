@@ -125,6 +125,21 @@ backend:
       - working: true
         agent: "testing"
         comment: "Testes do backend passaram: autenticação de webhook (Bearer e X-Webhook-Token), idempotência, criação de chave, revogação e validação funcionam."
+      - working: true
+        agent: "testing"
+        comment: "Re-testado após ajustes de robustez: ✅ Webhook com Bearer auth funciona, ✅ Webhook com secret no corpo funciona, ✅ Premium claim retorna KEY ativa, ✅ Refund revoga corretamente, ✅ Claim após refund retorna 404. Todos os cenários da review request funcionam perfeitamente."
+
+  - task: "Robustez na Extração de Secret e Normalização de Email"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Testado cenário específico com email mbrambila1998@gmail.com, order_id ORD-UI-1, product_code C55E28191. Autenticação funciona tanto com Authorization Bearer quanto com secret no corpo do webhook. Fluxo completo: compra → claim KEY → refund → claim retorna 404. Sistema robusto e funcionando conforme especificado."
 
 frontend:
   - task: "Adaptar extensão para checkout + validação online da KEY"
