@@ -162,7 +162,7 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Validar fluxo completo de webhook e emissão de KEY"
+    - "Robustez na Extração de Secret e Normalização de Email"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
