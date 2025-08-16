@@ -29,7 +29,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "js": ["pdfjs/pdf.min.js", "content.js"],
       "css": ["sidepanel.css"]
     }
   ],

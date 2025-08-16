@@ -83,7 +83,7 @@ async function extractPDFContent(forceGenerate = false, mode = null) {
     if (window.PDFViewerApplication && window.PDFViewerApplication.pdfDocument) {
       const pdfDoc = window.PDFViewerApplication.pdfDocument; let fullText = '';
       for (let i = 1; i <= Math.min(pdfDoc.numPages, 10); i++) { const page = await pdfDoc.getPage(i); const textContent = await page.getTextContent(); const pageText = textContent.items.map(item => item.str).join(' '); fullText += pageText + '\n'; }
-      if (fullText.length > 500) { extractedText = fullText; if (forceGenerate || shouldAutoSummarize(fullText)) { generateSummary(fullText); } }
+      if (fullText.length > 500) { extractedText = fullText; if (forceGenerate || shouldAutoSummarize(fullText)) { generateSummary(fullText, { source: 'pdf', fileName: (document.title || 'Documento PDF') }); } }
       else { showErrorPanel('Não foi possível extrair texto suficiente do PDF.'); }
     } else if (mode === 'fetch_pdf_via_bg') {
       // Pede o binário do PDF ao background e extrai com PDF.js embutido
@@ -94,15 +94,19 @@ async function extractPDFContent(forceGenerate = false, mode = null) {
           const raw = atob(b64);
           const len = raw.length; const arr = new Uint8Array(len);
           for (let i = 0; i < len; i++) arr[i] = raw.charCodeAt(i);
-          const pdfjsLib = window['pdfjsLib'];
-          if (!pdfjsLib) { showErrorPanel('PDF.js não disponível nesta página.'); return; }
+          let pdfjsLib = window['pdfjsLib'];
+          if (!pdfjsLib) {
+            // pdfjs agora é injetado via manifest; se ainda não estiver disponível, oriente o usuário
+            showErrorPanel('PDF.js não carregado pela extensão. Recarregue a página e tente novamente.');
+            return;
+          }
           try { pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('pdfjs/pdf.worker.min.js'); } catch (e) {}
           const doc = await pdfjsLib.getDocument({ data: arr, disableWorker: true }).promise;
           let fullText = '';
           const pages = Math.min(doc.numPages, 10);
           for (let i = 1; i <= pages; i++) { const page = await doc.getPage(i); const content = await page.getTextContent(); fullText += content.items.map(it => it.str).join(' ') + '\n'; }
           fullText = (fullText || '').trim();
-          if (fullText.length > 300) { if (forceGenerate || shouldAutoSummarize(fullText)) { generateSummary(fullText); } }
+          if (fullText.length > 300) { if (forceGenerate || shouldAutoSummarize(fullText)) { generateSummary(fullText, { source: 'pdf', fileName: (document.title || 'Documento PDF') }); } }
           else { showErrorPanel('PDF muito curto para gerar resumo.'); }
         });
       } catch (e) { showErrorPanel('Erro ao obter PDF: ' + (e?.message || e)); }
@@ -129,21 +133,22 @@ function extractWebPageContent(forceGenerate = false) {
 
 function shouldAutoSummarize(text) { const wordCount = text.split(' ').length; return wordCount > 300; }
 
-function generateSummary(text) {
+function generateSummary(text, extra = {}) {
   if (!text || text.length < 100) { showErrorPanel('Texto muito curto para gerar resumo'); return; }
   showLoadingPanel();
   try { window.__autoSummAbortController?.abort?.(); } catch (e) {}
   window.__autoSummAbortController = new AbortController();
   // Ler persona atual para exibir no rodapé
   try { chrome.runtime.sendMessage({ action: 'getSettings' }, (resp) => { window.__autoSummPersona = resp?.settings?.persona || ''; }); } catch (e) {}
-  chrome.runtime.sendMessage({ action: "generateSummary", text: text }, (response) => {
+  const payload = { action: "generateSummary", text: text, ...extra };
+  chrome.runtime.sendMessage(payload, (response) => {
     if (chrome.runtime.lastError) { showErrorPanel('Erro de comunicação: ' + chrome.runtime.lastError.message); return; }
     if (response && response.success) { showSummaryPanel(response.summary, response.modelUsed); }
     else { showErrorPanel(response?.error || 'Erro desconhecido ao gerar resumo'); }
   });
 }
 
-function escapeHtml(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function escapeHtml(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;/g,).replace(/>/g, '&gt;'); }
 
 function formatStructuredSummary(text) {
   const lines = (text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
@@ -151,7 +156,7 @@ function formatStructuredSummary(text) {
   for (const line of lines) {
     const numMatch = line.match(/^(\d+)[\.\)]\s+(.*)$/);
     if (numMatch) { if (current) items.push(current); const rest = numMatch[2]; const parts = rest.split(':'); const title = parts.shift()?.trim() || rest.trim(); const desc = parts.join(':').trim(); current = { title, desc, subs: [] }; continue; }
-    const subMatch = line.match(/^[-•]\s+(.*)$/); if (subMatch && current) { current.subs.push(subMatch[1].trim()); continue; }
+    const subMatch = line.match(/^[–\-•]\s+(.*)$/); if (subMatch && current) { current.subs.push(subMatch[1].trim()); continue; }
     if (current) { current.desc = (current.desc ? current.desc + ' ' : '') + line; }
   }
   if (current) items.push(current);

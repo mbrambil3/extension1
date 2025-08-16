@@ -173,23 +173,29 @@ frontend:
       - working: false
         agent: "main"
         comment: "Endureci o parser do webhook: extração de email/order/product com mais caminhos + fallback via regex; mapeei mais labels para 'compra completa' (payment_success/pagamento confirmado/aprovado)."
+      - working: false
+        agent: "user"
+        comment: "Erro persiste ao resumir PDF no viewer nativo: painel mostra 'PDF.js não disponível nesta página'."
+      - working: false
+        agent: "main"
+        comment: "RCA: pdf.js não estava disponível no content script (somente em popup). Correção: injetar pdfjs/pdf.min.js via manifest em content_scripts (antes de content.js) e, no content.js, marcar summaries de PDF com source:'pdf' e fileName para salvar corretamente no histórico. Solicitar reteste."
 
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 1
+  test_sequence: 2
   run_ui: false
 
 test_plan:
   current_focus:
-    - "Robustez na Extração de Secret e Normalização de Email"
+    - "Fix popup: Gerar Resumo Agora e Ver Histórico"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
   - agent: "main"
-    message: "Backend implementado e testado com sucesso. Aguardando confirmação para adaptar a extensão: (1) adicionar botão de checkout, (2) remover MASTER_KEY local, (3) validar KEY no servidor e refletir revogações."
+    message: "Corrigida injeção do PDF.js no content script e melhoria do fluxo de geração em PDFs abertos no viewer nativo. Favor retestar: abrir um PDF (viewer nativo), clicar em 'Gerar Resumo Agora' e verificar resumo + histórico marcado como PDF."
   - agent: "testing"
     message: "Re-testei backend após ajustes de robustez. Cenários específicos da review request funcionam perfeitamente: autenticação Bearer e secret no corpo, criação de KEY ativa, revogação por refund, e claim retornando 404 após revogação. Sistema robusto e funcionando conforme especificado."
 
