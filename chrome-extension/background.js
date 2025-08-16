@@ -482,6 +482,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === 'getHistory') { getHistory().then(h => sendResponse({ history: h })); return true; }
   if (message.action === 'clearHistory') { clearHistory().then(() => sendResponse({ success: true })); return true; }
+  if (message.action === 'hardResetState') {
+    (async () => { try { const out = await hardResetAll(); sendResponse({ success: true, ...out }); } catch (e) { sendResponse({ success: false, error: String(e && e.message || e) }); } })();
+    return true;
+  }
 });
 
 // =====================
