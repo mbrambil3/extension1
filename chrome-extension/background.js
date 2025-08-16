@@ -213,7 +213,7 @@ class DeviceStateManager {
     const p = premium || this.state?.premium || {};
     if (p.unlimited) return true;
     if (p.until) {
-      try { return new Date(p.until).getTime() > Date.now(); } catch { return false; }
+      try { const dt = parseExpiry(p.until); return dt && dt.getTime() > Date.now(); } catch { return false; }
     }
     return false;
   }
