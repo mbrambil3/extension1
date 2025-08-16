@@ -9,7 +9,10 @@ function initializeExtension() {
   isExtensionReady = true;
   chrome.runtime.sendMessage({ action: "getSettings" }, (response) => {
     if (chrome.runtime.lastError) { console.log('Erro ao conectar com background script:', chrome.runtime.lastError); return; }
-    if (response && response.isActive && response.settings.autoSummary) { detectAndExtractContent(); }
+    if (response && response.isActive && response.settings.autoSummary) {
+      const quick = quickCanStartExtraction();
+      detectAndExtractContent(false, quick && quick.canStart ? (quick.mode || null) : null);
+    }
   });
 }
 
