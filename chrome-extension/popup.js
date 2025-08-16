@@ -41,9 +41,11 @@ function updatePremiumUI(status) {
     const keyInput = document.getElementById('subscriptionKey');
     const hint = document.getElementById('subscriptionHint');
     const subscribeBtn = document.getElementById('subscribeBtn');
+    const waBtn = document.getElementById('whatsappKeyBtn');
     if (!applyBtn || !keyInput || !hint) return;
 
     if (subscribeBtn) { subscribeBtn.classList.toggle('hidden', !!isPremium); }
+    if (waBtn) { waBtn.classList.toggle('hidden', !!isPremium); }
 
     if (isPremium) {
         applyBtn.textContent = 'Premium ATIVADO';
