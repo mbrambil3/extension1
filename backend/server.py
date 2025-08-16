@@ -116,6 +116,8 @@ def _event_uid(payload: Dict[str, Any]) -> str:
 
 
 def _extract_event_name(payload: Dict[str, Any]) -> str:
+    # Try query param style fallback e.g., payment-success redirect
+    # If payload empty, attempt to parse common names from nested data
     candidates = [
         payload.get('event'), payload.get('type'), payload.get('evento'), payload.get('acao'), payload.get('status'),
     ]
