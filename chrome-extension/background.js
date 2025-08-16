@@ -197,6 +197,8 @@ class DeviceStateManager {
 
   async persist() {
     if (!this.state) return;
+    // Garante que a data seja serializada como ISO string
+    try { if (this.state.premium && this.state.premium.until instanceof Date) { this.state.premium.until = this.state.premium.until.toISOString(); } } catch {}
     await prom((cb) => chrome.storage.sync.set({ as_device_state: this.state }, cb));
     await this.saveToBookmarks();
   }
