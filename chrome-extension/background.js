@@ -348,6 +348,36 @@ class DeviceStateManager {
 
 const deviceStateManager = new DeviceStateManager();
 
+// Helpers: armazenar/limpar KEY crua para revalidação
+async function getStoredRawKey(){ try{ const r=await prom((cb)=>chrome.storage.local.get('as_sub_key_raw', cb)); const v=r&&r.as_sub_key_raw; return v?String(v):''; }catch(e){ return ''; }}
+async function setStoredRawKey(k){ try{ await prom((cb)=>chrome.storage.local.set({ as_sub_key_raw: String(k||'') }, cb)); }catch(e){} }
+async function clearStoredRawKey(){ try{ await prom((cb)=>chrome.storage.local.remove('as_sub_key_raw', cb)); }catch(e){} }
+
+async function revalidateIfNeeded(){
+  try {
+    const key = (await getStoredRawKey()).trim();
+    if (!key) return false;
+    const v = await validateKeyServer(key);
+    await deviceStateManager.ensureLoaded();
+    if (!(v && v.ok)) {
+      // inválida agora: cair para Free
+      if (deviceStateManager.state) {
+        deviceStateManager.state.premium = { until: null, unlimited: false, keyMasked: null };
+        await clearStoredRawKey();
+        await deviceStateManager.persist();
+      }
+      return true;
+    } else {
+      // ainda válida: atualiza until se mudou
+      const untilIso = v.expires_at ? new Date(v.expires_at).toISOString() : null;
+      const masked = deviceStateManager.state?.premium?.keyMasked || (function(){ try { return deviceStateManager.maskKey ? deviceStateManager.maskKey(key) : null; } catch(e){ return null; } })();
+      deviceStateManager.state.premium = { unlimited: false, until: untilIso, keyMasked: masked };
+      await deviceStateManager.persist();
+      return false;
+    }
+  } catch (e) { return false; }
+}
+
 // ============ Mensageria ============
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
