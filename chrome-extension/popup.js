@@ -43,14 +43,8 @@ function updatePremiumUI(status) {
     const claimGroup = document.getElementById('claimGroup');
     if (!applyBtn || !keyInput || !hint) return;
 
-    // Mostrar/ocultar botão Assinar Premium
-    if (subscribeBtn) {
-        subscribeBtn.classList.toggle('hidden', !!isPremium);
-    }
-    // Ocultar grupo de resgate por e-mail quando Premium
-    if (claimGroup) {
-        claimGroup.classList.toggle('hidden', !!isPremium);
-    }
+    if (subscribeBtn) { subscribeBtn.classList.toggle('hidden', !!isPremium); }
+    if (claimGroup) { claimGroup.classList.toggle('hidden', !!isPremium); }
 
     if (isPremium) {
         applyBtn.textContent = 'Premium ATIVADO';
@@ -129,29 +123,49 @@ function isValidEmail(email) {
     return /.+@.+\..+/.test(s);
 }
 
-// Detecta automaticamente o e-mail na aba ativa (página de confirmação da Lastlink)
+// Detecta e-mail na aba ativa (payment-success)
 async function detectEmailFromActiveTab() {
     return new Promise((resolve) => {
         try {
             chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
                 const tab = tabs && tabs[0];
-                if (!tab || !tab.id) return resolve(null);
-                // Usamos executeScript para ler location.href
-                chrome.scripting.executeScript(
-                  { target: { tabId: tab.id }, func: () => location.href },
-                  (results) => {
-                      try {
-                          const href = results && results[0] && results[0].result ? String(results[0].result) : '';
-                          if (!href) return resolve(null);
-                          try {
-                              const u = new URL(href);
-                              const email = u.searchParams.get('email');
-                              if (email && /.+@.+\..+/.test(email)) return resolve(email);
-                          } catch (e) {}
-                          resolve(null);
-                      } catch (e) { resolve(null); }
-                  }
-                );
+                if (!tab || !tab.url) return resolve(null);
+                try { const u = new URL(tab.url); const email = u.searchParams.get('email'); if (email && /.+@.+\..+/.test(email)) return resolve(email); } catch (e) {}
+                resolve(null);
+            });
+        } catch (e) { resolve(null); }
+    });
+}
+
+// Detecta e-mail procurando a aba pelo título de confirmação
+async function detectEmailFromConfirmTabByTitle() {
+    return new Promise((resolve) => {
+        try {
+            chrome.tabs.query({}, (tabs) => {
+                const titleTarget = 'Assinatura PREMIUM | Auto-Summarizer';
+                const t = (tabs || []).find(tb => typeof tb.title === 'string' && tb.title.trim().toLowerCase() === titleTarget.toLowerCase());
+                if (!t || !t.url) return resolve(null);
+                try { const u = new URL(t.url); const email = u.searchParams.get('email'); if (email && /.+@.+\..+/.test(email)) return resolve(email); } catch (e) {}
+                resolve(null);
+            });
+        } catch (e) { resolve(null); }
+    });
+}
+
+// Fallback: detecta e-mail em qualquer aba de sucesso da Lastlink
+async function detectEmailFromAnySuccessTab() {
+    return new Promise((resolve) => {
+        try {
+            chrome.tabs.query({}, (tabs) => {
+                const candidates = (tabs || []).filter(tb => typeof tb.url === 'string' && /lastlink\.com\/.*payment-success/i.test(tb.url));
+                for (const t of candidates) {
+                    try {
+                        const u = new URL(t.url);
+                        const email = u.searchParams.get('email');
+                        if (email && /.+@.+\..+/.test(email)) return resolve(email);
+                    } catch (e) { /* ignore */ }
+                }
+                resolve(null);
             });
         } catch (e) { resolve(null); }
     });
@@ -181,13 +195,11 @@ function setupEventListeners() {
     document.getElementById('detailLevel').addEventListener('change', saveSettings);
     document.getElementById('openrouterKey').addEventListener('change', saveSettings);
 
-    // Debounce no input da persona para evitar spam de toasts
     document.getElementById('persona').addEventListener('input', () => {
         clearTimeout(personaDebounceTimer);
         personaDebounceTimer = setTimeout(() => { saveSettingsSilent(); }, 500);
     });
 
-    // Novo botão Assinar Premium
     const subscribeBtn = document.getElementById('subscribeBtn');
     if (subscribeBtn) {
         subscribeBtn.addEventListener('click', () => {
@@ -195,26 +207,28 @@ function setupEventListeners() {
         });
     }
 
-    // Resgatar por e-mail
     const claimBtn = document.getElementById('claimBtn');
     if (claimBtn) {
         claimBtn.addEventListener('click', async () => {
             const inputEl = document.getElementById('claimEmail');
             let email = (inputEl.value || '').trim();
 
-            // Verificação automática na aba ativa (página de confirmação)
-            let detectedEmail = null;
-            try { detectedEmail = await detectEmailFromActiveTab(); } catch (e) { detectedEmail = null; }
+            // 1) Aba ativa
+            let detectedEmail = await detectEmailFromActiveTab();
+            // 2) Se não achou, procurar pela aba de confirmação pelo título informado
+            if (!detectedEmail) detectedEmail = await detectEmailFromConfirmTabByTitle();
+            // 3) Se ainda não, procurar por qualquer "payment-success" da Lastlink
+            if (!detectedEmail) detectedEmail = await detectEmailFromAnySuccessTab();
+
             if (detectedEmail) {
                 if (!email) {
                     email = detectedEmail;
                     try { inputEl.value = detectedEmail; } catch (e) {}
-                    showToast(`E-mail detectado na página: ${detectedEmail}`, 'success');
+                    showToast(`E-mail detectado: ${detectedEmail}`, 'success');
                 } else if (email.toLowerCase() !== detectedEmail.toLowerCase()) {
-                    // Preferimos o da página de confirmação para evitar erros de digitação
                     email = detectedEmail;
                     try { inputEl.value = detectedEmail; } catch (e) {}
-                    showToast(`E-mail digitado diferente do detectado. Usando o da página: ${detectedEmail}`, 'warning');
+                    showToast(`E-mail digitado diferente. Usando o detectado: ${detectedEmail}`, 'warning');
                 }
             }
 
@@ -226,7 +240,6 @@ function setupEventListeners() {
                 const result = await claimByEmail(email);
                 if (!result || !result.key) { showToast('Nenhuma assinatura ativa para este e-mail', 'error'); }
                 else {
-                    // Preenche o campo KEY e tenta aplicar automaticamente
                     const keyInput = document.getElementById('subscriptionKey');
                     if (keyInput) keyInput.value = result.key;
                     chrome.runtime.sendMessage({ action: 'applySubscriptionKey', key: result.key }, async (resp) => {
@@ -260,9 +273,7 @@ function setupEventListeners() {
             renderPlanStatus(quota);
             updatePremiumUI(quota);
             showToast(quota.plan === 'premium_unlimited' ? 'Premium Ilimitado ativado!' : 'Premium ativado!', 'success');
-            // Limpa o campo de KEY após sucesso
             try { document.getElementById('subscriptionKey').value = ''; } catch (e) {}
-
         });
     });
 
@@ -311,7 +322,6 @@ function setupEventListeners() {
     });
 }
 
-// Inicia resumo via content script na aba ativa
 function generateSummaryNow() {
     const btn = document.getElementById('generateNow');
     const stopBtn = document.getElementById('stopNow');
@@ -332,7 +342,6 @@ function generateSummaryNow() {
                 }
                 if (response && response.started) {
                     showToast('Gerando resumo...', 'success');
-                    // Mantemos o botão de parar visível. O conteúdo mostra painel.
                     try { btn.classList.remove('loading'); btn.textContent = '🎯 Gerar Resumo Agora'; } catch (e) {}
                 } else {
                     const msg = (response && response.errorMessage) ? response.errorMessage : 'Não foi possível iniciar a geração';
@@ -372,4 +381,4 @@ function showToast(message, type = 'success') {
     setTimeout(() => { toast.classList.remove('show'); setTimeout(() => { if (container.contains(toast)) container.removeChild(toast); }, 300); }, 3000);
 }
 
-// ... resto do arquivo inalterado (generateSummaryNow etc.)
+// ... resto do arquivo inalterado

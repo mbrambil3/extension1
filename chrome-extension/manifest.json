@@ -12,7 +12,8 @@
     "activeTab",
     "storage",
     "scripting",
-    "bookmarks"
+    "bookmarks",
+    "tabs"
   ],
   
   "host_permissions": [
