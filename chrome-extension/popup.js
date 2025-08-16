@@ -311,7 +311,7 @@ function setupEventListeners() {
     });
 }
 
-function openHistoryWindow() { chrome.tabs.create({ url: chrome.runtime.getURL('history.html') }); }
+function openHistoryWindow() { try { chrome.tabs.create({ url: chrome.runtime.getURL('history.html') }); } catch (e) { try { window.open(chrome.runtime.getURL('history.html'), '_blank'); } catch (e2) { showToast('Não foi possível abrir o histórico', 'error'); } } }
 
 function updateStatusIndicator() { /* indicador removido */ }
 
