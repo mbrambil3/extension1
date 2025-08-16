@@ -101,3 +101,101 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "Teste os novos endpoints do backend e o webhook: POST /api/webhooks/lastlink, POST /api/premium/claim, POST /api/premium/keys/validate"
+
+backend:
+  - task: "Webhook Authentication"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "Webhook authentication working correctly with both Bearer token and X-Webhook-Token headers. Invalid auth properly returns 401."
+
+  - task: "Webhook Event Processing"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "All webhook events processed correctly: Compra Completa creates premium keys, Pagamento Reembolsado/Estornado/Cancelado revoke keys."
+
+  - task: "Webhook Idempotency"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "Idempotency working correctly. Same payload sent twice returns processed=false, idempotent=true on second call."
+
+  - task: "Premium Key Claiming"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "POST /api/premium/claim working correctly. Returns active key after valid purchase, 404 for non-existent purchases."
+
+  - task: "Premium Key Validation"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "POST /api/premium/keys/validate working correctly. Active keys return valid=true, plan=premium. Revoked keys return valid=false, plan=free, status=revoked."
+
+  - task: "Key Revocation Logic"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "Key revocation working correctly via refund/chargeback/cancel webhooks. Keys properly marked as revoked and validation reflects the change."
+
+frontend:
+  # No frontend testing required for this task
+
+metadata:
+  created_by: "testing_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Webhook Authentication"
+    - "Webhook Event Processing"
+    - "Premium Key Claiming"
+    - "Premium Key Validation"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    - agent: "testing"
+      message: "Completed comprehensive testing of all new webhook and premium endpoints. All 8 test scenarios passed successfully. The webhook system correctly handles authentication, event processing, idempotency, and key lifecycle management. Premium key claiming and validation work as expected with proper error handling."
