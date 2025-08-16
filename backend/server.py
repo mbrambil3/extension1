@@ -84,13 +84,19 @@ def _extract_header_secret(request: Request) -> Optional[str]:
     auth = request.headers.get('authorization') or request.headers.get('Authorization')
     if auth and auth.lower().startswith('bearer '):
         return auth.split(' ', 1)[1].strip()
-    token = request.headers.get('x-webhook-token') or request.headers.get('X-Webhook-Token')
-    if token:
-        return token.strip()
-    # Some providers send X-Lastlink-Secret or similar
-    token = request.headers.get('x-lastlink-secret') or request.headers.get('X-Lastlink-Secret')
-    if token:
-        return token.strip()
+    for h in ['x-webhook-token', 'X-Webhook-Token', 'x-lastlink-secret', 'X-Lastlink-Secret', 'x-lastlink-token', 'X-Lastlink-Token']:
+        token = request.headers.get(h)
+        if token:
+            return token.strip()
+    # Fallback: allow token via query string ?token=... or ?secret=...
+    try:
+        qp = request.query_params
+        for k in ['token', 'secret', 'webhook_secret']:
+            v = qp.get(k)
+            if v:
+                return v.strip()
+    except Exception:
+        pass
     return None
 
 
