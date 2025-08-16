@@ -11,13 +11,14 @@
       .btn-activate { background: #f1f5f9; color: #0f172a; }
       .btn-activate.disabled { opacity: 0.6; cursor: not-allowed; }
       .hidden { display: none !important; }
+      .adv-note { font-size:12px; opacity:0.75; }
     </style>
 </head>
 <body>
     <div class="popup-container">
         <div class="popup-header">
             <h2>📄 Auto-Summarizer</h2>
-            <p class="version">v1.0.6</p>
+            <p class="version">v1.0.9</p>
         </div>
         
         <div class="popup-content">
@@ -114,7 +115,11 @@
                     <input id="openrouterKey" type="password" class="setting-select" placeholder="sk-or-v1-..." />
                     <small class="setting-description">Se preencher, usaremos sua própria cota. Em branco, usamos a chave padrão.</small>
                   </div>
-
+                  <div class="setting-item" style="margin-top:10px;">
+                    <label for="backendBaseUrl" class="setting-label">Backend URL (opcional)</label>
+                    <input id="backendBaseUrl" type="text" class="setting-select" placeholder="https://seu-dominio.com" />
+                    <small class="setting-description adv-note">Use a mesma URL do backend que você validou no Postman. Ex.: https://pdf-reader-plus.preview.emergentagent.com</small>
+                  </div>
                 </details>
             </div>
             

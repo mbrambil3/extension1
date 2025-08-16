@@ -12,8 +12,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 const CHECKOUT_URL = 'https://lastlink.com/p/C55E28191/checkout-payment';
 const WHATSAPP_LINK = 'https://wa.me/message/TUOHH5MFFZQSL1';
-const BACKEND_BASE = 'https://summary-pro.preview.emergentagent.com';
-const CLAIM_URL = BACKEND_BASE + '/api/premium/claim'; // não usado mais
 
 async function loadQuotaStatus() {
     return new Promise((resolve) => {
@@ -56,12 +54,10 @@ function updatePremiumUI(status) {
 
     const detailSel = document.getElementById('detailLevel');
     if (!isPremium) {
-        // Bloqueia opção Profundo (PRO) quando Free
         try { if (detailSel) { const opt = [...detailSel.options].find(o => o.value === 'profundo'); if (opt) { opt.disabled = true; if (detailSel.value === 'profundo') detailSel.value = 'long'; } } } catch(e) {}
     }
 
     if (isPremium) {
-        // Libera Profundo (PRO)
         try { if (detailSel) { const opt = [...detailSel.options].find(o => o.value === 'profundo'); if (opt) opt.disabled = false; } } catch(e) {}
 
         applyBtn.textContent = 'Premium ATIVADO';
@@ -85,6 +81,7 @@ function loadSettings() {
             document.getElementById('language').value = response.settings.language;
             document.getElementById('detailLevel').value = response.settings.detailLevel;
             document.getElementById('openrouterKey').value = response.settings.openrouterKey || '';
+            document.getElementById('backendBaseUrl').value = response.settings.backendBaseUrl || '';
 
             document.getElementById('persona').value = response.settings.persona || '';
             try {
@@ -116,6 +113,7 @@ function saveSettingsInternal(showToastFlag) {
         language: document.getElementById('language').value,
         detailLevel: document.getElementById('detailLevel').value,
         openrouterKey: document.getElementById('openrouterKey').value,
+        backendBaseUrl: document.getElementById('backendBaseUrl').value.trim(),
         persona: document.getElementById('persona').value.trim()
     };
     chrome.runtime.sendMessage({ action: "updateSettings", isActive: settings.autoSummary, settings }, async (response) => {
@@ -145,6 +143,7 @@ function setupEventListeners() {
     document.getElementById('language').addEventListener('change', saveSettings);
     document.getElementById('detailLevel').addEventListener('change', saveSettings);
     document.getElementById('openrouterKey').addEventListener('change', saveSettings);
+    document.getElementById('backendBaseUrl').addEventListener('change', saveSettings);
 
     document.getElementById('persona').addEventListener('input', () => {
         clearTimeout(personaDebounceTimer);
@@ -223,7 +222,6 @@ function setupEventListeners() {
     });
 }
 
-// Inicia resumo via content script na aba ativa
 function generateSummaryNow() {
     const btn = document.getElementById('generateNow');
     const stopBtn = document.getElementById('stopNow');

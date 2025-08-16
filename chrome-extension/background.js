@@ -6,7 +6,8 @@ let summarySettings = {
   detailLevel: 'medium',
   persona: '',
   openrouterKey: '',
-  deepseekKey: ''
+  deepseekKey: '',
+  backendBaseUrl: '' // NEW: backend configurável pelo usuário
 };
 
 // Plano/Quota
@@ -19,9 +20,12 @@ let lastRequestTabId = null;
 
 const DEFAULT_OR_API_KEY = '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'; // chave fornecida pelo usuário
 
-// Backend base URL para validação de KEY (injetado estaticamente nesta build)
-const BACKEND_BASE = 'https://summary-pro.preview.emergentagent.com';
-const BACKEND_VALIDATE_URL = BACKEND_BASE + '/api/premium/keys/validate';
+// Backends conhecidos (fallbacks), ordem de preferência: antigo estável -> atual
+const FALLBACK_BACKENDS = [
+  'https://pdf-reader-plus.preview.emergentagent.com',
+  'https://summary-pro.preview.emergentagent.com'
+];
+
 const OR_URL = 'https://openrouter.ai/api/v1/chat/completions';
 // Somente modelos FREE do OpenRouter
 const PRIMARY_MODEL = 'deepseek/deepseek-r1:free';
@@ -60,9 +64,13 @@ function getDeepseekApiKey() {
 }
 
 function loadSettingsFromStorage(callback) {
-  chrome.storage.sync.get(['extensionActive', 'summarySettings'], (result) => {
+  chrome.storage.sync.get(['extensionActive', 'summarySettings', 'as_last_backend_base'], (result) => {
     if (result && typeof result.extensionActive !== 'undefined') isExtensionActive = result.extensionActive;
     if (result && result.summarySettings) summarySettings = { ...summarySettings, ...result.summarySettings };
+    if (result && result.as_last_backend_base && !summarySettings.backendBaseUrl) {
+      // Se não há base configurada, mas temos uma última que funcionou, mantemos em memória
+      // (não sobrescreve a configurada manualmente)
+    }
     if (typeof callback === 'function') callback({ isActive: isExtensionActive, summarySettings });
   });
 }
@@ -82,11 +90,6 @@ chrome.commands.onCommand.addListener((command) => {
 // =========================
 // Persistência sem servidor
 // =========================
-// Objetivo: sobreviver à desinstalação/reinstalação utilizando:
-// 1) chrome.storage.sync (sincroniza na conta Google do usuário)
-// 2) chrome.bookmarks como shadow store (dados em um bookmark "silencioso")
-// Nenhum custo, nenhum domínio.
-
 const BOOKMARK_URL = 'https://autosummarizer.local/data';
 const BOOKMARK_FOLDER_NAME = 'AutoSummarizer Data';
 
@@ -132,16 +135,13 @@ class DeviceStateManager {
 
   async ensureLoaded() {
     if (this.state) return;
-    // 1) Tenta sync
     const syncRes = await prom((cb) => chrome.storage.sync.get('as_device_state', cb));
     let st = syncRes?.as_device_state || null;
 
-    // 2) Se não tiver, tenta bookmarks
     if (!st) {
       st = await this.loadFromBookmarks();
     }
 
-    // 3) Importa legado do local (somente contagem) para primeira vez (NÃO importa premium antigo)
     if (!st) {
       const localRes = await prom((cb) => chrome.storage.local.get(['dailyUsage'], cb));
       const d = localRes?.dailyUsage;
@@ -153,22 +153,18 @@ class DeviceStateManager {
       };
     }
 
-    // 4) Se ainda não houver, cria novo
     if (!st) {
       const deviceId = await sha256Hex(buildFingerprintString());
       st = { deviceId, premium: { until: null, unlimited: false, keyMasked: null }, dailyUsage: { date: todayStr(), count: 0 } };
     }
 
-    // Reset diário
     const t = todayStr();
     if (st.dailyUsage?.date !== t) st.dailyUsage = { date: t, count: 0 };
 
-    // Migração v1.0.5: invalidar qualquer premium antigo que não seja ilimitado (bloqueia chaves aleatórias do passado)
     try {
       const migRes = await prom((cb) => chrome.storage.sync.get('as_mig_v105_no_trial', cb));
       const migrated = !!(migRes && migRes.as_mig_v105_no_trial);
       if (!migrated) {
-        // Preserva premium válido (ilimitado ou com until futuro). Apenas limpa estados antigos inválidos
         if (st.premium && st.premium.unlimited !== true) {
           let keep = false;
           try {
@@ -178,14 +174,13 @@ class DeviceStateManager {
             }
           } catch (e) {}
           if (!keep) {
-            // Mantém como está para não apagar premium válido por engano
+            // mantém
           }
         }
         await prom((cb) => chrome.storage.sync.set({ as_mig_v105_no_trial: true }, cb));
       }
     } catch (e) {}
 
-    // Migração v1.0.6: remover premium ilimitado legado (MASTER KEY)
     try {
       const migRes2 = await prom((cb) => chrome.storage.sync.get('as_mig_v106_drop_unlimited', cb));
       const migrated2 = !!(migRes2 && migRes2.as_mig_v106_drop_unlimited);
@@ -206,7 +201,6 @@ class DeviceStateManager {
 
   async persist() {
     if (!this.state) return;
-    // Garante que a data seja serializada como ISO string
     try { if (this.state.premium && this.state.premium.until instanceof Date) { this.state.premium.until = this.state.premium.until.toISOString(); } } catch {}
     await prom((cb) => chrome.storage.sync.set({ as_device_state: this.state }, cb));
     await this.saveToBookmarks();
@@ -255,7 +249,6 @@ class DeviceStateManager {
     await this.ensureLoaded();
     const key = String(keyRaw || '').trim();
     if (!key || key.length < 6) return { ok: false, error: 'KEY inválida' };
-    // Validação online da KEY de assinatura no backend (sem MASTER KEY)
     try {
       const valid = await validateKeyServer(key);
       if (valid && valid.ok) {
@@ -285,7 +278,6 @@ class DeviceStateManager {
       if (Array.isArray(matches) && matches.length > 0) {
         node = matches.sort((a,b)=> (b.dateGroupModified||0) - (a.dateGroupModified||0))[0];
       } else {
-        // Fallback: procurar por URL e pegar a mais recente
         const all = await prom((cb) => chrome.bookmarks.search({ url: BOOKMARK_URL }, cb));
         if (Array.isArray(all) && all.length > 0) {
           node = all.sort((a,b)=> (b.dateGroupModified||0) - (a.dateGroupModified||0))[0];
@@ -307,7 +299,6 @@ class DeviceStateManager {
     const tree = await prom((cb) => chrome.bookmarks.getTree(cb));
     const root = tree && tree[0];
     const bar = root?.children?.find(c => c.title === 'Bookmarks Bar' || c.title === 'Barra de favoritos') || root?.children?.[0];
-    // Procura pasta existente
     let folder = null;
     function findFolder(nodes) {
       for (const n of nodes) {
@@ -322,7 +313,6 @@ class DeviceStateManager {
     }
     folder = findFolder(root?.children || [])
     if (folder) return folder.id;
-    // Cria pasta no nível da barra
     const created = await prom((cb) => chrome.bookmarks.create({ parentId: bar?.id, title: BOOKMARK_FOLDER_NAME }, cb));
     return created.id;
   }
@@ -335,13 +325,12 @@ class DeviceStateManager {
       const url = `${BOOKMARK_URL}#${btoa(dataStr)}`;
       const existing = await prom((cb) => chrome.bookmarks.search({ title }, cb));
       if (Array.isArray(existing) && existing.length > 0) {
-        // Atualiza o primeiro
         await prom((cb) => chrome.bookmarks.update(existing[0].id, { title, url }, cb));
       } else {
         await prom((cb) => chrome.bookmarks.create({ parentId: folderId, title, url }, cb));
       }
     } catch (e) {
-      // Ignore silenciosamente
+      // Ignore
     }
   }
 }
@@ -360,7 +349,6 @@ async function revalidateIfNeeded(){
     const v = await validateKeyServer(key);
     await deviceStateManager.ensureLoaded();
     if (!(v && v.ok)) {
-      // inválida agora: cair para Free
       if (deviceStateManager.state) {
         deviceStateManager.state.premium = { until: null, unlimited: false, keyMasked: null };
         await clearStoredRawKey();
@@ -368,7 +356,6 @@ async function revalidateIfNeeded(){
       }
       return true;
     } else {
-      // ainda válida: atualiza until se mudou
       const untilIso = v.expires_at ? new Date(v.expires_at).toISOString() : null;
       const masked = deviceStateManager.state?.premium?.keyMasked || (function(){ try { return deviceStateManager.maskKey ? deviceStateManager.maskKey(key) : null; } catch(e){ return null; } })();
       deviceStateManager.state.premium = { unlimited: false, until: untilIso, keyMasked: masked };
@@ -399,7 +386,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 const prem = snap && snap.premium ? snap.premium : {};
                 const active = deviceStateManager.isPremiumActive(prem);
                 if (active) {
-                  // Sem a KEY salva, não há como revalidar: por segurança, cair para Free
                   deviceStateManager.state.premium = { until: null, unlimited: false, keyMasked: null };
                   await deviceStateManager.persist();
                 }
@@ -414,14 +400,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             try {
               await deviceStateManager.ensureLoaded();
               if (!(v && v.ok)) {
-                // Inválida agora: cair para Free e limpar chave salva
                 if (deviceStateManager.state) {
                   deviceStateManager.state.premium = { until: null, unlimited: false, keyMasked: null };
                   await deviceStateManager.persist();
                 }
                 try { chrome.storage.local.remove('as_sub_key_raw', () => {}); } catch (e) {}
               } else {
-                // Ainda válida: sincroniza vencimento
                 const untilIso = v.expires_at ? (new Date(v.expires_at)).toISOString() : null;
                 const masked = (deviceStateManager.state && deviceStateManager.state.premium && deviceStateManager.state.premium.keyMasked) ? deviceStateManager.state.premium.keyMasked : null;
                 deviceStateManager.state.premium = { unlimited: false, until: untilIso, keyMasked: masked };
@@ -464,7 +448,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const resp = await fetch(message.url, { method: 'GET' });
         if (!resp.ok) { sendResponse({ ok: false, error: 'HTTP ' + resp.status }); return; }
         const buf = await resp.arrayBuffer();
-        // Converte para base64
         let binary = '';
         const bytes = new Uint8Array(buf);
         const chunk = 0x8000;
@@ -485,9 +468,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const key = String(message.key || '')
       const res = await deviceStateManager.applyKey(key);
       if (!res.ok) { sendResponse({ success: false, error: res.error || 'Falha' }); return; }
-      // Guarda a key crua para revalidação futura
       try { await setStoredRawKey(key); } catch (e) {}
-      // Atualiza snapshot para retorno coerente
       await deviceStateManager.ensureLoaded();
       const { premium } = deviceStateManager.getSnapshot();
       sendResponse({ success: true, plan: res.plan, premiumUntil: premium.until || res.premiumUntil || null });
@@ -496,7 +477,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === 'generateSummary') {
-    // Enforce quota antes de qualquer coisa
     (async () => {
       const quotaCheck = await deviceStateManager.enforceQuotaOrFail();
       if (!quotaCheck.ok) { sendResponse({ success: false, error: quotaCheck.error }); return; }
@@ -505,7 +485,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const fromPdf = message.source === 'pdf';
       const fileName = message.fileName || 'Documento PDF';
 
-      // Se o usuário for Free, forçar nível efetivo no máximo "long" (bloquear Profundo)
       const isPrem = deviceStateManager.isPremiumActive(quotaCheck.premium || {});
       const originalLevel = summarySettings.detailLevel;
       const mustDowngrade = !isPrem && String(originalLevel || '').toLowerCase() === 'profundo';
@@ -520,7 +499,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const cached = await getFromCache(key);
         if (cached && (Date.now() - cached.timestamp) < CACHE_TTL_MS) {
           await chrome.storage.local.set({ lastModelUsed: cached.model || 'cache' });
-          // Contabiliza uso
           await deviceStateManager.registerSuccessUsage();
           if (fromPdf) { await saveToHistory(message.text, cached.summary, sender.tab, { inferredTitle: cached.title || fileName, source: 'pdf', persona: personaKey }); sendResponse({ success: true, summary: cached.summary, title: cached.title || fileName, modelUsed: cached.model || 'cache' }); }
           else { await saveToHistory(message.text, cached.summary, sender.tab, { persona: personaKey }); sendResponse({ success: true, summary: cached.summary, title: sender?.tab?.title || 'Página', modelUsed: cached.model || 'cache' }); }
@@ -545,7 +523,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await chrome.storage.local.set({ lastModelUsed: modelUsed });
 
         const extra = { persona: (summarySettings.persona || '').trim() };
-        // Contabiliza uso
         await deviceStateManager.registerSuccessUsage();
         if (fromPdf) { await saveToHistory(message.text, summary, sender.tab, { inferredTitle: title || fileName, source: 'pdf', ...extra }); sendResponse({ success: true, summary, title: title || fileName, modelUsed }); }
         else { await saveToHistory(message.text, summary, sender.tab, extra); sendResponse({ success: true, summary, title: sender?.tab?.title || 'Página', modelUsed }); }
@@ -561,7 +538,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (msg.includes('503') || /UNAVAILABLE/i.test(msg) || /Failed to fetch/i.test(msg)) display = 'Serviço temporariamente indisponível. Tente novamente em alguns segundos.';
         sendResponse({ success: false, error: display });
       } finally {
-        // Restaura nível original do usuário
         if (mustDowngrade) summarySettings.detailLevel = originalLevel;
       }
     })();
@@ -578,7 +554,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // OpenRouter helpers
 // =====================
 function getMaxTokens() {
-  // Escalonar orçamento por nível; Profundo recebe mais tokens para permitir expansão dos subtópicos
   switch ((summarySettings.detailLevel || '').toLowerCase()) {
     case 'short': return 600;
     case 'medium': return 900;
@@ -631,14 +606,12 @@ async function orWithFallback(messages) {
         }
       }
     }
-    // Último fallback: DeepSeek API direta se o usuário colocou a própria chave DeepSeek
     const dsKey = getDeepseekApiKey();
     if (dsKey) {
       try {
         const out = await deepseekDirect(messages, dsKey);
         return out;
       } catch (err) {
-        // cai no erro geral abaixo
       }
     }
     throw new Error('Serviço temporariamente indisponível após múltiplas tentativas. Tente novamente em instantes.');
@@ -656,15 +629,11 @@ function buildSummaryInstructions(text) {
       detailPrompt = 'Crie um resumo EXTREMAMENTE PROFUNDO, LONGO e PRECISO. Estruture em seções claras: (1) Contexto e objetivo; (2) Metodologia (amostra, desenho, instrumentos, análises); (3) Resultados (com números‑chave); (4) Discussão (interpretações e limitações); (5) Implicações práticas e teóricas; (6) Conclusões; (7) Palavras‑chave.';
       break;
   }
-  // A personalidade não pode ampliar tamanho/complexidade além do nível escolhido.
-  // Use persona apenas para tom/linguagem, sem alterar profundidade.
   const persona = (summarySettings.persona || '').trim();
   const styleLine = persona ? `Adote apenas o TOM/ESTILO a seguir, sem aumentar profundidade além do nível escolhido: ${persona}.` : '';
 
-  // Regras de formatação padrão (para short/medium/long)
   const defaultRules = `\n\nRegras de formatação (siga exatamente):\n1) Produza de 3 a 8 pontos principais como lista numerada (1., 2., 3., ...)\n2) Em cada item, comece com um tópico curto (3–8 palavras), seguido de dois pontos e, em seguida, uma explicação breve em uma única frase\n3) Quando for útil, adicione 1–3 subitens iniciados com "- " (hífen e espaço), cada um curto\n4) Não use markdown com **asteriscos**, títulos ou blocos de código\n5) Não envolva a resposta em blocos de código; retorne apenas texto simples estruturado`;
 
-  // Regras especiais para PROFUNDO: listar e em seguida expandir cada subitem
   const deepRules = `\n\nRegras do modo PROFUNDO (siga exatamente):\nA) Primeiro, liste os pontos principais como em uma lista numerada (1., 2., 3., ...), podendo incluir subitens com "- ".\nB) EM SEGUIDA, crie uma seção chamada EXPANSÕES e EXPANDA CADA SUBITEM listado anteriormente com 1–2 parágrafos explicativos, baseados no texto, com números, exemplos e nuances quando existirem.\nC) NÃO invente dados; se não houver números disponíveis, explique qualitativamente.\nD) Mantenha o tom/persona definidos sem aumentar a profundidade além do nível PROFUNDO.\nE) Retorne apenas texto simples (sem markdown de títulos), usando a etiqueta literal "EXPANSÕES:" para iniciar a parte de aprofundamento.`;
 
   const rules = level === 'profundo' ? deepRules : defaultRules;
@@ -684,11 +653,9 @@ async function generateSummaryOR(text) {
   ];
   const result = await orWithFallback(messages);
 
-  // Em Profundo, garantir que EXPANSÕES existam e não estejam vazias
   if (level === 'profundo') {
     const hasExp = /\bEXPANSÕES\s*:/i.test(result.text);
     if (!hasExp) {
-      // Pós-processo mínimo: se não houver, pedir uma segunda rodada curta só para expandir
       try {
         const prompt2 = `A seguir está um RESUMO com subitens. Crie apenas a seção EXPANSÕES, expandindo cada subitem com 1–2 parágrafos, sem repetir o resumo inicial.\n\nRESUMO:\n${result.text.substring(0, 45000)}`;
         const messages2 = [
@@ -711,7 +678,6 @@ async function generatePdfTitleAndSummaryOR(text) {
     ? `Você é um assistente de resumo. Mantenha o TOM/ESTILO indicado, mas NÃO aumente a complexidade/tamanho além do nível de detalhe selecionado: ${persona}. Siga as regras de formatação.`
     : 'Você é um assistente de resumo que retorna lista numerada com tópicos curtos e subitens quando necessário.';
 
-  // Prompt diferente para PDF, inclusive com EXPANSÕES em Profundo
   const base = `Você receberá o conteúdo textual de um arquivo PDF. Gere:\n- TITLE: um título curto (no máximo 10 palavras), sem aspas/markdown\n- SUMMARY: um resumo estruturado conforme regras abaixo${styleLine}`;
   const rulesDefault = `\n\nRegras do SUMMARY (siga exatamente):\n1) 3 a 8 itens numerados (1., 2., ...)\n2) Cada item: um tópico curto (3–8 palavras) seguido de dois pontos e uma frase breve\n3) Subitens opcionais iniciados com "- " (1–3)`;
   const rulesDeep = `\n\nRegras do SUMMARY no modo PROFUNDO:\n1) Faça como acima (itens numerados, subitens com "- ")\n2) Depois, crie a seção EXPANSÕES e expanda cada subitem com 1–2 parágrafos detalhados, sem inventar dados`;
@@ -766,26 +732,52 @@ function obfuscateKey(k) {
   } catch { return '***'; }
 }
 
-async function validateKeyServer(key) {
+async function resolveBackendBases() {
   try {
-    const resp = await fetch(BACKEND_VALIDATE_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key })
-    });
-    if (!resp.ok) return { ok: false };
-    const data = await resp.json();
-    const ms = (typeof data?.expires_at_ms === 'number' && data.expires_at_ms > 0) ? data.expires_at_ms : null;
-    let iso = null;
-    if (ms) {
-      iso = new Date(ms).toISOString();
-    } else if (data?.expires_at) {
-      const d = new Date(data.expires_at);
-      iso = isNaN(d.getTime()) ? null : d.toISOString();
-    }
-    return { ok: !!(data && data.valid === true && data.plan === 'premium'), expires_at: iso, raw: data };
-  } catch (e) { return { ok: false, error: String(e?.message || e) }; }
+    const r = await prom((cb) => chrome.storage.sync.get(['summarySettings', 'as_last_backend_base'], cb));
+    const configured = (r && r.summarySettings && r.summarySettings.backendBaseUrl) ? String(r.summarySettings.backendBaseUrl).trim() : '';
+    const sticky = (r && r.as_last_backend_base) ? String(r.as_last_backend_base).trim() : '';
+    const list = [];
+    if (configured) list.push(configured.replace(/\/$/, ''));
+    if (sticky && !list.includes(sticky)) list.push(sticky);
+    for (const b of FALLBACK_BACKENDS) if (!list.includes(b)) list.push(b);
+    return list;
+  } catch (e) {
+    return [...FALLBACK_BACKENDS];
+  }
 }
+
+async function validateKeyServer(key) {
+  const bases = await resolveBackendBases();
+  let firstError = null;
+  for (const base of bases) {
+    try {
+      const url = base.replace(/\/$/, '') + '/api/premium/keys/validate';
+      const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) });
+      if (!resp.ok) { firstError = firstError || { ok: false, error: 'http_'+resp.status }; continue; }
+      const data = await resp.json();
+      const ms = (typeof data?.expires_at_ms === 'number' && data.expires_at_ms > 0) ? data.expires_at_ms : null;
+      let iso = null;
+      if (ms) iso = new Date(ms).toISOString();
+      else if (data?.expires_at) { const d = new Date(data.expires_at); iso = isNaN(d.getTime()) ? null : d.toISOString(); }
+      const ok = !!(data && data.valid === true && data.plan === 'premium' && data.status === 'active');
+      if (ok) {
+        try { await prom((cb)=>chrome.storage.sync.set({ as_last_backend_base: base.replace(/\/$/, '') }, cb)); } catch (e) {}
+        return { ok: true, expires_at: iso, raw: data };
+      }
+      // Mantém info do primeiro erro significativo
+      if (!firstError) firstError = { ok: false, error: data?.status || 'invalid', raw: data };
+      // Se este backend diz revoked/expired, provavelmente é o correto: podemos retornar
+      if (data?.status === 'revoked' || data?.status === 'expired') return { ok: false, error: data.status, raw: data };
+      // Tenta próximo (pode haver divergência de ambientes)
+    } catch (e) {
+      firstError = firstError || { ok: false, error: String(e?.message || e) };
+      continue;
+    }
+  }
+  return firstError || { ok: false };
+}
+
 async function getFromCache(key) { const res = await chrome.storage.local.get('summaryCache'); return (res.summaryCache || {})[key] || null; }
 async function saveToCache(key, value) { const res = await chrome.storage.local.get('summaryCache'); const cache = res.summaryCache || {}; cache[key] = value; const keys = Object.keys(cache); if (keys.length > 100) { let oldestKey = null, oldestTs = Infinity; for (const k of keys) { const ts = cache[k]?.timestamp || 0; if (ts < oldestTs) { oldestTs = ts; oldestKey = k; } } if (oldestKey) delete cache[oldestKey]; } await chrome.storage.local.set({ summaryCache: cache }); }
 async function getCooldown() { const r = await chrome.storage.local.get('openrouterCooldownUntil'); return r.openrouterCooldownUntil || 0; }
