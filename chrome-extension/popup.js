@@ -136,7 +136,7 @@ async function detectEmailFromActiveTab() {
             chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
                 const tab = tabs && tabs[0];
                 if (!tab || !tab.id) return resolve(null);
-                // Usamos executeScript para ler location.href sem precisar da permissão "tabs"
+                // Usamos executeScript para ler location.href
                 chrome.scripting.executeScript(
                   { target: { tabId: tab.id }, func: () => location.href },
                   (results) => {
@@ -311,7 +311,54 @@ function setupEventListeners() {
     });
 }
 
-function openHistoryWindow() { try { chrome.tabs.create({ url: chrome.runtime.getURL('history.html') }); } catch (e) { try { window.open(chrome.runtime.getURL('history.html'), '_blank'); } catch (e2) { showToast('Não foi possível abrir o histórico', 'error'); } } }
+// Inicia resumo via content script na aba ativa
+function generateSummaryNow() {
+    const btn = document.getElementById('generateNow');
+    const stopBtn = document.getElementById('stopNow');
+    try { btn.classList.add('loading'); btn.textContent = 'Gerando...'; if (stopBtn) stopBtn.style.display = 'block'; } catch (e) {}
+    try {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            const tab = tabs && tabs[0];
+            if (!tab || !tab.id) {
+                showToast('Nenhuma aba ativa encontrada', 'warning');
+                try { if (stopBtn) stopBtn.style.display = 'none'; btn.classList.remove('loading'); btn.textContent = '🎯 Gerar Resumo Agora'; } catch (e) {}
+                return;
+            }
+            chrome.tabs.sendMessage(tab.id, { action: 'generateSummary', manual: true }, (response) => {
+                if (chrome.runtime.lastError) {
+                    showToast('Erro: ' + chrome.runtime.lastError.message, 'error');
+                    try { if (stopBtn) stopBtn.style.display = 'none'; btn.classList.remove('loading'); btn.textContent = '🎯 Gerar Resumo Agora'; } catch (e) {}
+                    return;
+                }
+                if (response && response.started) {
+                    showToast('Gerando resumo...', 'success');
+                    // Mantemos o botão de parar visível. O conteúdo mostra painel.
+                    try { btn.classList.remove('loading'); btn.textContent = '🎯 Gerar Resumo Agora'; } catch (e) {}
+                } else {
+                    const msg = (response && response.errorMessage) ? response.errorMessage : 'Não foi possível iniciar a geração';
+                    showToast(msg, 'warning');
+                    try { if (stopBtn) stopBtn.style.display = 'none'; btn.classList.remove('loading'); btn.textContent = '🎯 Gerar Resumo Agora'; } catch (e) {}
+                }
+            });
+        });
+    } catch (e) {
+        showToast('Falha ao iniciar: ' + (e && e.message ? e.message : e), 'error');
+        try { if (stopBtn) stopBtn.style.display = 'none'; btn.classList.remove('loading'); btn.textContent = '🎯 Gerar Resumo Agora'; } catch (e2) {}
+    }
+}
+
+function openHistoryWindow() {
+    try {
+        const url = (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL)
+          ? chrome.runtime.getURL('history.html')
+          : 'history.html';
+        try { chrome.tabs.create({ url }); }
+        catch (e) { window.open(url, '_blank'); }
+    } catch (eOuter) {
+        try { window.open('history.html', '_blank'); }
+        catch (e2) { showToast('Não foi possível abrir o histórico', 'error'); }
+    }
+}
 
 function updateStatusIndicator() { /* indicador removido */ }
 
