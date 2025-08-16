@@ -184,7 +184,7 @@ class DeviceStateManager {
             }
           } catch (e) {}
           if (!keep) {
-            st.premium = { until: null, unlimited: false, keyMasked: null };
+            // Mantém como está para não apagar premium válido por engano
           }
         }
         await prom((cb) => chrome.storage.sync.set({ as_mig_v105_no_trial: true }, cb));
