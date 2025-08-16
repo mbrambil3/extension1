@@ -76,6 +76,16 @@ class AdminCreateKeyResponse(BaseModel):
     email: EmailStr
     expires_at: datetime
 
+
+# Admin revoke key
+class AdminRevokeKeyRequest(BaseModel):
+    email: Optional[EmailStr] = None
+    key: Optional[str] = None
+    order_id: Optional[str] = None
+
+class AdminRevokeKeyResponse(BaseModel):
+    revoked_count: int
+
 # Utility functions
 SAFE_SECRET_ENV = 'LASTLINK_WEBHOOK_SECRET'
 
