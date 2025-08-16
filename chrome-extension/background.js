@@ -24,6 +24,10 @@ let currentAbortController = null;
 let lastRequestTabId = null;
 
 const DEFAULT_OR_API_KEY = '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'; // chave fornecida pelo usuário
+
+// Backend base URL para validação de KEY (injetado estaticamente nesta build)
+const BACKEND_BASE = 'https://readwise-chrome.preview.emergentagent.com';
+const BACKEND_VALIDATE_URL = BACKEND_BASE + '/api/premium/keys/validate';
 const OR_URL = 'https://openrouter.ai/api/v1/chat/completions';
 // Somente modelos FREE do OpenRouter
 const PRIMARY_MODEL = 'deepseek/deepseek-r1:free';
