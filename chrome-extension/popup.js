@@ -129,6 +129,34 @@ function isValidEmail(email) {
     return /.+@.+\..+/.test(s);
 }
 
+// Tenta detectar automaticamente o e-mail na aba ativa (ex.: página de confirmação da Lastlink)
+async function detectEmailFromActiveTab() {
+    return new Promise((resolve) => {
+        try {
+            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                const tab = tabs && tabs[0];
+                if (!tab || !tab.id) return resolve(null);
+                chrome.scripting.executeScript(
+                  { target: { tabId: tab.id }, func: () => location.href },
+                  (results) => {
+                      try {
+                          const href = results && results[0] && results[0].result ? String(results[0].result) : '';
+                          if (!href) return resolve(null);
+                          // Extrai parâmetro email da URL
+                          try {
+                              const u = new URL(href);
+                              const email = u.searchParams.get('email');
+                              if (email && /.+@.+\..+/.test(email)) return resolve(email);
+                          } catch (e) {}
+                          resolve(null);
+                      } catch (e) { resolve(null); }
+                  }
+                );
+            });
+        } catch (e) { resolve(null); }
+    });
+}
+
 async function claimByEmail(email) {
     try {
         const resp = await fetch(CLAIM_URL, {
@@ -171,7 +199,20 @@ function setupEventListeners() {
     const claimBtn = document.getElementById('claimBtn');
     if (claimBtn) {
         claimBtn.addEventListener('click', async () => {
-            const email = (document.getElementById('claimEmail').value || '').trim();
+            const inputEl = document.getElementById('claimEmail');
+            let email = (inputEl.value || '').trim();
+
+            // Verificação automática na aba ativa (página de confirmação)
+            let detectedEmail = null;
+            try { detectedEmail = await detectEmailFromActiveTab(); } catch (e) { detectedEmail = null; }
+            if (detectedEmail) {
+                if (!email || email.toLowerCase() !== detectedEmail.toLowerCase()) {
+                    email = detectedEmail;
+                    try { inputEl.value = detectedEmail; } catch (e) {}
+                    showToast(`E-mail detectado na página: ${detectedEmail}`, 'success');
+                }
+            }
+
             if (!isValidEmail(email)) { showToast('Informe um e-mail válido do checkout', 'warning'); return; }
             claimBtn.disabled = true;
             const original = claimBtn.textContent;
@@ -249,14 +290,14 @@ function setupEventListeners() {
                 const doc = await pdfjs.getDocument({ data: uint8, disableWorker: true }).promise;
                 let fullText = '';
                 const pages = Math.min(doc.numPages, 10);
-                for (let i = 1; i <= pages; i++) { const page = await doc.getPage(i); const content = await page.getTextContent(); fullText += content.items.map(it => it.str).join(' ') + '\n'; }
+                for (let i = 1; i &lt;= pages; i++) { const page = await doc.getPage(i); const content = await page.getTextContent(); fullText += content.items.map(it => it.str).join(' ') + '\n'; }
                 fullText = (fullText || '').trim();
-                if (!fullText || fullText.length < 50) { showToast('Não foi possível extrair texto do PDF', 'error'); return; }
+                if (!fullText || fullText.length &lt; 50) { showToast('Não foi possível extrair texto do PDF', 'error'); return; }
                 const payload = `Arquivo: ${file.name}\n\n${fullText.substring(0, 50000)}`;
                 showToast('Importando PDF... O resumo aparecerá no Histórico em instantes.', 'success');
                 chrome.runtime.sendMessage({ action: 'generateSummary', text: payload, source: 'pdf', fileName: file.name }, (response) => {
                     if (chrome.runtime.lastError) { showToast('Erro: ' + chrome.runtime.lastError.message, 'error'); return; }
-                    if (response && response.success) { showToast('PDF enviado. Abra o Histórico para acompanhar.', 'success'); }
+                    if (response &amp;&amp; response.success) { showToast('PDF enviado. Abra o Histórico para acompanhar.', 'success'); }
                     else { showToast(response?.error || 'Falha ao iniciar resumo do PDF', 'error'); }
                 });
             } catch (err) { console.error('Falha ao processar PDF:', err); showToast('Falha ao processar PDF: ' + (err?.message || err), 'error'); }
