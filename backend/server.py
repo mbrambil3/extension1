@@ -249,15 +249,24 @@ async def lastlink_webhook(request: Request):
         logging.error('LASTLINK_WEBHOOK_SECRET not configured')
         raise HTTPException(status_code=500, detail='Webhook not configured')
     provided = _extract_header_secret(request)
-    if not provided or not _constant_time_equals(provided, configured):
-        raise HTTPException(status_code=401, detail='Unauthorized')
 
-    # Access raw body and parse JSON safely
+    # Access raw body and parse JSON safely (needed in case secret vem no corpo)
     body_bytes = await request.body()
     try:
         payload = json.loads(body_bytes.decode('utf-8')) if body_bytes else {}
     except Exception:
         payload = {}
+
+    if not provided:
+        # Fallback: secret no corpo do webhook
+        for k in ['token', 'secret', 'webhook_secret', 'signature']:
+            v = payload.get(k)
+            if isinstance(v, str) and v.strip():
+                provided = v.strip()
+                break
+
+    if not provided or not _constant_time_equals(provided, configured):
+        raise HTTPException(status_code=401, detail='Unauthorized')
 
     event_name_raw = _extract_event_name(payload).lower()
     uid = _event_uid(payload)
