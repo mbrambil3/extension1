@@ -153,6 +153,20 @@ frontend:
       - working: "NA"
         agent: "main"
         comment: "Aguardando aprovação do usuário para remover MASTER_KEY local e validar KEY via backend; adicionar botão de checkout e atualização para v1.0.6."
+  - task: "Fix popup: Gerar Resumo Agora e Ver Histórico"
+    implemented: true
+    working: false
+    file: "/app/chrome-extension/popup.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: false
+        agent: "user"
+        comment: "Usuário reportou: botões 'Gerar Resumo Agora' e 'Ver Histórico' não retornam nada."
+      - working: false
+        agent: "main"
+        comment: "Implementado generateSummaryNow no popup.js para enviar mensagem ao content script e abertura robusta de history.html com getURL + tabs.create + fallback window.open. Ajustes de UI no grupo 'Plano e Limites' e campo de e-mail acima do botão. Aguardando reteste do usuário."
 
 metadata:
   created_by: "main_agent"
