@@ -142,6 +142,63 @@ async function detectEmailFromActiveTab() {
                       try {
                           const href = results && results[0] && results[0].result ? String(results[0].result) : '';
                           if (!href) return resolve(null);
+                          try { const u = new URL(href); const email = u.searchParams.get('email'); if (email && /.+@.+\..+/.test(email)) return resolve(email); } catch (e) {}
+                          resolve(null);
+                      } catch (e) { resolve(null); }
+                  }
+                );
+            });
+        } catch (e) { resolve(null); }
+    });
+}
+
+// Busca também em outras abas do navegador (ex.: se a confirmação ficou em outra aba)
+async function detectEmailFromAnyTab() {
+    return new Promise((resolve) => {
+        try {
+            chrome.tabs.query({}, (tabs) => {
+                const all = Array.isArray(tabs) ? tabs : [];
+                const candidates = all.filter(t => typeof t.url === 'string' && /lastlink\.com\/.*(payment-success|checkout|order|purchase)/i.test(t.url));
+                if (candidates.length === 0) return resolve(null);
+                let resolved = false;
+                let pending = candidates.length;
+                for (const t of candidates) {
+                    chrome.scripting.executeScript(
+                        { target: { tabId: t.id }, func: () => location.href },
+                        (results) => {
+                            pending--;
+                            try {
+                                const href = results && results[0] && results[0].result ? String(results[0].result) : '';
+                                if (href) {
+                                    try {
+                                        const u = new URL(href);
+                                        const email = u.searchParams.get('email');
+                                        if (!resolved && email && /.+@.+\..+/.test(email)) {
+                                            resolved = true;
+                                            return resolve(email);
+                                        }
+                                    } catch (e) {}
+                                }
+                            } catch (e) {}
+                            if (pending === 0 && !resolved) resolve(null);
+                        }
+                    );
+                }
+            });
+        } catch (e) { resolve(null); }
+    });
+}
+    return new Promise((resolve) => {
+        try {
+            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                const tab = tabs && tabs[0];
+                if (!tab || !tab.id) return resolve(null);
+                chrome.scripting.executeScript(
+                  { target: { tabId: tab.id }, func: () => location.href },
+                  (results) => {
+                      try {
+                          const href = results && results[0] && results[0].result ? String(results[0].result) : '';
+                          if (!href) return resolve(null);
                           // Extrai parâmetro email da URL
                           try {
                               const u = new URL(href);
