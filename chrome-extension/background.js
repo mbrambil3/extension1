@@ -617,7 +617,9 @@ async function validateKeyServer(key) {
     });
     if (!resp.ok) return { ok: false };
     const data = await resp.json();
-    return { ok: !!(data && data.valid === true && data.plan === 'premium'), expires_at: data?.expires_at || null, raw: data };
+    const ms = (typeof data?.expires_at_ms === 'number' && data.expires_at_ms > 0) ? data.expires_at_ms : null;
+    const iso = data?.expires_at || (ms ? new Date(ms).toISOString() : null);
+    return { ok: !!(data && data.valid === true && data.plan === 'premium'), expires_at: iso, raw: data };
   } catch (e) { return { ok: false, error: String(e?.message || e) }; }
 }
 async function getFromCache(key) { const res = await chrome.storage.local.get('summaryCache'); return (res.summaryCache || {})[key] || null; }
