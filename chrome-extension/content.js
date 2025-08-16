@@ -72,6 +72,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 function detectAndExtractContent(forceGenerate = false, mode = null) {
+  // Quando chamado sem modo (ex.: Resumo Automático), detecta modo ideal
+  if (mode == null) {
+    try {
+      const quick = quickCanStartExtraction();
+      if (quick && quick.canStart) mode = quick.mode || null;
+    } catch (e) {}
+  }
   const url = window.location.href;
   const isPdfPage = url.includes('.pdf') || document.querySelector('embed[type="application/pdf"]') || document.querySelector('object[type="application/pdf"]');
   if (isPdfPage) { extractPDFContent(forceGenerate, mode); }
