@@ -548,10 +548,11 @@ class BackendTester:
                 self.log_result("Key Validation Revoked", False, "No key returned from claim")
                 return False
             
-            # Now revoke the key via refund webhook
+            # Now revoke the key via refund webhook (same order_id, different event ID)
             revoke_payload = {
                 "event": "Pagamento Reembolsado",
-                "order_id": order_id,
+                "id": f"REFUND-EVENT-{order_id}",  # Unique event ID to avoid idempotency
+                "order_id": order_id,  # Same order_id as purchase for proper revocation
                 "product_code": TEST_PRODUCT_CODE,
                 "customer": {"email": revoke_email}
             }
