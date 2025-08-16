@@ -270,3 +270,5 @@ test_plan:
 agent_communication:
     - agent: "testing"
       message: "Completed comprehensive testing of all new webhook and premium endpoints. All 8 test scenarios passed successfully. The webhook system correctly handles authentication, event processing, idempotency, and key lifecycle management. Premium key claiming and validation work as expected with proper error handling."
+    - agent: "testing"
+      message: "Validação completa das ações do popup da extensão Chrome concluída com sucesso. ✅ generateSummaryNow usa chrome.tabs.query e chrome.tabs.sendMessage corretamente, enviando {action:'generateSummary', manual:true}. ✅ content.js possui listener que responde com {started:true} em cenário normal e {started:false, errorMessage:...} para PDF viewer nativo. ✅ openHistoryWindow abre history.html via chrome.runtime.getURL e chrome.tabs.create com fallback para window.open. ✅ history.html inclui history.js que chama chrome.runtime.sendMessage({action:'getHistory'}) na carga. Todos os fluxos estão implementados corretamente conforme especificado na review request."
