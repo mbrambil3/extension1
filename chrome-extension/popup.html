@@ -88,6 +88,16 @@
                         <!-- Botão Ativar Premium existente -->
                         <button id="applyKeyBtn" class="secondary-btn btn-activate" style="flex:0 0 auto;">Ativar Premium</button>
                     </div>
+
+                    <!-- Resgatar por e-mail: inserir e-mail do checkout e buscar KEY -->
+                    <div class="setting-item" id="claimGroup" style="margin-top:8px;">
+                        <label class="setting-label">Resgatar por e-mail</label>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <input id="claimEmail" type="email" class="setting-select" placeholder="E-mail da compra" style="flex:1; height:38px; border-radius:8px;" />
+                            <button id="claimBtn" class="secondary-btn" style="flex:0 0 auto;">Resgatar</button>
+                        </div>
+                        <small class="setting-description" style="display:block; margin-left:0;">Use o e-mail do checkout para obter sua KEY com segurança.</small>
+                    </div>
                     
                     <input id="subscriptionKey" type="text" class="setting-select" placeholder="KEY de ASSINATURA" style="width:100%; margin-top:8px; height:38px; border-radius:8px;" />
                     <small id="subscriptionHint" class="setting-description" style="display:block; margin-left:0;">Insira sua KEY para liberar Premium.</small>

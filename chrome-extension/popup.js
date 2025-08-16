@@ -11,6 +11,8 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 const CHECKOUT_URL = 'https://lastlink.com/p/C55E28191/checkout-payment';
+const BACKEND_BASE = 'https://readwise-chrome.preview.emergentagent.com';
+const CLAIM_URL = BACKEND_BASE + '/api/premium/claim';
 
 async function loadQuotaStatus() {
     return new Promise((resolve) => {
@@ -38,11 +40,16 @@ function updatePremiumUI(status) {
     const keyInput = document.getElementById('subscriptionKey');
     const hint = document.getElementById('subscriptionHint');
     const subscribeBtn = document.getElementById('subscribeBtn');
+    const claimGroup = document.getElementById('claimGroup');
     if (!applyBtn || !keyInput || !hint) return;
 
     // Mostrar/ocultar botão Assinar Premium
     if (subscribeBtn) {
         subscribeBtn.classList.toggle('hidden', !!isPremium);
+    }
+    // Ocultar grupo de resgate por e-mail quando Premium
+    if (claimGroup) {
+        claimGroup.classList.toggle('hidden', !!isPremium);
     }
 
     if (isPremium) {
@@ -116,6 +123,30 @@ function saveSettingsInternal(showToastFlag) {
 function saveSettings() { saveSettingsInternal(true); }
 function saveSettingsSilent() { saveSettingsInternal(false); }
 
+function isValidEmail(email) {
+    const s = String(email || '').trim();
+    if (!s || s.length < 5) return false;
+    return /.+@.+\..+/.test(s);
+}
+
+async function claimByEmail(email) {
+    try {
+        const resp = await fetch(CLAIM_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+        });
+        if (!resp.ok) {
+            const txt = await resp.text().catch(()=> '');
+            throw new Error(txt || 'Falha ao resgatar KEY');
+        }
+        const data = await resp.json();
+        return data; // { key, status }
+    } catch (e) {
+        throw e;
+    }
+}
+
 function setupEventListeners() {
     document.getElementById('autoSummary').addEventListener('change', saveSettings);
     document.getElementById('language').addEventListener('change', saveSettings);
@@ -133,6 +164,44 @@ function setupEventListeners() {
     if (subscribeBtn) {
         subscribeBtn.addEventListener('click', () => {
             try { chrome.tabs.create({ url: CHECKOUT_URL }); } catch (e) { window.open(CHECKOUT_URL, '_blank'); }
+        });
+    }
+
+    // Resgatar por e-mail
+    const claimBtn = document.getElementById('claimBtn');
+    if (claimBtn) {
+        claimBtn.addEventListener('click', async () => {
+            const email = (document.getElementById('claimEmail').value || '').trim();
+            if (!isValidEmail(email)) { showToast('Informe um e-mail válido do checkout', 'warning'); return; }
+            claimBtn.disabled = true;
+            const original = claimBtn.textContent;
+            claimBtn.textContent = 'Resgatando...';
+            try {
+                const result = await claimByEmail(email);
+                if (!result || !result.key) { showToast('Nenhuma assinatura ativa para este e-mail', 'error'); }
+                else {
+                    // Preenche o campo KEY e tenta aplicar automaticamente
+                    const keyInput = document.getElementById('subscriptionKey');
+                    if (keyInput) keyInput.value = result.key;
+                    chrome.runtime.sendMessage({ action: 'applySubscriptionKey', key: result.key }, async (resp) => {
+                        if (resp && resp.success) {
+                            const quota = await loadQuotaStatus();
+                            renderPlanStatus(quota);
+                            updatePremiumUI(quota);
+                            showToast('KEY resgatada e ativada com sucesso!', 'success');
+                            try { document.getElementById('subscriptionKey').value = ''; } catch (e) {}
+                        } else {
+                            showToast('KEY obtida. Clique em Ativar Premium para aplicar.', 'success');
+                        }
+                    });
+                }
+            } catch (e) {
+                const msg = (e && e.message) ? e.message : 'Falha ao resgatar KEY';
+                showToast(msg.includes('404') ? 'Nenhuma assinatura ativa encontrada para este e-mail' : msg, 'error');
+            } finally {
+                claimBtn.disabled = false;
+                claimBtn.textContent = original;
+            }
         });
     }
 
