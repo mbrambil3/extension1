@@ -240,9 +240,7 @@ class DeviceStateManager {
     await this.ensureLoaded();
     const key = String(keyRaw || '').trim();
     if (!key || key.length < 6) return { ok: false, error: 'KEY inválida' };
-    const norm = key.toUpperCase();
-    // Removido suporte à MASTER KEY local
-    // Validação online da KEY de assinatura no backend
+    // Validação online da KEY de assinatura no backend (sem MASTER KEY)
     try {
       const valid = await validateKeyServer(key);
       if (valid && valid.ok) {
