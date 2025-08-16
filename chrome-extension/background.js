@@ -628,10 +628,10 @@ async function orWithFallback(messages) {
 function buildSummaryInstructions(text) {
   let detailPrompt = '';
   switch (summarySettings.detailLevel) {
-    case 'short': detailPrompt = 'Crie um resumo muito breve (máximo 3 pontos principais)'; break;
-    case 'medium': detailPrompt = 'Crie um resumo conciso com os pontos principais (5-7 pontos)'; break;
-    case 'long': detailPrompt = 'Crie um resumo detalhado e abrangente'; break;
-    case 'profundo': detailPrompt = 'Crie um resumo extremamente profundo, longo e abrangente, com alto nível de detalhamento e nuance'; break;
+    case 'short': detailPrompt = 'Crie um resumo muito breve (máximo 3 pontos principais).'; break;
+    case 'medium': detailPrompt = 'Crie um resumo conciso com os pontos principais (5-7 pontos).'; break;
+    case 'long': detailPrompt = 'Crie um resumo detalhado e abrangente, incluindo seções e subtópicos relevantes.'; break;
+    case 'profundo': detailPrompt = 'Crie um resumo EXTREMAMENTE PROFUNDO, LONGO e PRECISO. Produza uma síntese estruturada com: (1) Contexto e objetivo do trabalho; (2) Metodologia com detalhes (amostra, desenho, instrumentos, análises); (3) Resultados com números-chave e achados; (4) Discussão com interpretações e limitações; (5) Implicações práticas e teóricas; (6) Conclusões; (7) Palavras‑chave. Evite superficialidade, seja exaustivo, fiel ao texto e mantenha o tom definido na Personalidade.'; break;
   }
   const persona = (summarySettings.persona || '').trim();
   const styleLine = persona ? `Adote exatamente o seguinte estilo/persona ao responder (sem quebrar as regras de formatação): ${persona}.` : '';
