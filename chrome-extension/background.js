@@ -582,6 +582,28 @@ async function deepseekDirect(messages, apiKey) {
 }
 
 function contentHash(str) { let h = 5381; for (let i = 0; i < str.length; i++) { h = ((h << 5) + h) + str.charCodeAt(i); h |= 0; } return `h${h}`; }
+
+function obfuscateKey(k) {
+  try {
+    const s = String(k);
+    const head = s.slice(0, 3);
+    const tail = s.slice(-3);
+    return head + '***' + tail;
+  } catch { return '***'; }
+}
+
+async function validateKeyServer(key) {
+  try {
+    const resp = await fetch(BACKEND_VALIDATE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key })
+    });
+    if (!resp.ok) return false;
+    const data = await resp.json();
+    return !!(data && data.valid === true && data.plan === 'premium');
+  } catch (e) { return false; }
+}
 async function getFromCache(key) { const res = await chrome.storage.local.get('summaryCache'); return (res.summaryCache || {})[key] || null; }
 async function saveToCache(key, value) { const res = await chrome.storage.local.get('summaryCache'); const cache = res.summaryCache || {}; cache[key] = value; const keys = Object.keys(cache); if (keys.length > 100) { let oldestKey = null, oldestTs = Infinity; for (const k of keys) { const ts = cache[k]?.timestamp || 0; if (ts < oldestTs) { oldestTs = ts; oldestKey = k; } } if (oldestKey) delete cache[oldestKey]; } await chrome.storage.local.set({ summaryCache: cache }); }
 async function getCooldown() { const r = await chrome.storage.local.get('openrouterCooldownUntil'); return r.openrouterCooldownUntil || 0; }
