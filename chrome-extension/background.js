@@ -239,8 +239,18 @@ class DeviceStateManager {
       await this.persist();
       return { ok: true, plan: 'premium_unlimited', premiumUntil: null };
     }
-    // NO MORE trial/30 days for random keys. Anything else is invalid.
-    return { ok: false, error: 'KEY inválida' };
+    // Validação online da KEY de assinatura no backend
+    try {
+      const valid = await validateKeyServer(key);
+      if (valid) {
+        this.state.premium = { unlimited: false, until: null, keyMasked: this.maskKey(key), keyObf: obfuscateKey(key) };
+        await this.persist();
+        return { ok: true, plan: 'premium', premiumUntil: null };
+      }
+      return { ok: false, error: 'KEY inválida' };
+    } catch (e) {
+      return { ok: false, error: 'Falha na validação da KEY. Tente novamente.' };
+    }
   }
 
   maskKey(k) {
