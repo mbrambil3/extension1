@@ -8,7 +8,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Dict, Any
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 import hashlib
 import json
 
@@ -47,6 +47,7 @@ class PremiumKey(BaseModel):
     status: str = Field(default="active")  # active | revoked
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: Optional[datetime] = None
 
 class ClaimRequest(BaseModel):
     email: EmailStr
@@ -63,13 +64,15 @@ class ValidateKeyResponse(BaseModel):
     plan: str  # 'premium' | 'free'
     status: Optional[str] = None
 
-# Webhook generic model (store raw)
-class WebhookAck(BaseModel):
-    received: bool
-    processed: bool
-    event: Optional[str] = None
-    idempotent: bool = False
+# Admin create key
+class AdminCreateKeyRequest(BaseModel):
+    email: EmailStr
+    days: Optional[int] = Field(default=30, ge=1, le=365)
 
+class AdminCreateKeyResponse(BaseModel):
+    key: str
+    email: EmailStr
+    expires_at: datetime
 
 # Utility functions
 SAFE_SECRET_ENV = 'LASTLINK_WEBHOOK_SECRET'
@@ -77,123 +80,6 @@ SAFE_SECRET_ENV = 'LASTLINK_WEBHOOK_SECRET'
 
 def _constant_time_equals(a: str, b: str) -> bool:
     return hashlib.sha256(a.encode()).digest() == hashlib.sha256(b.encode()).digest()
-
-
-def _extract_header_secret(request: Request) -> Optional[str]:
-    # Try common headers
-    auth = request.headers.get('authorization') or request.headers.get('Authorization')
-    if auth and auth.lower().startswith('bearer '):
-        return auth.split(' ', 1)[1].strip()
-    for h in ['x-webhook-token', 'X-Webhook-Token', 'x-lastlink-secret', 'X-Lastlink-Secret', 'x-lastlink-token', 'X-Lastlink-Token']:
-        token = request.headers.get(h)
-        if token:
-            return token.strip()
-    # Fallback: allow token via query string ?token=... or ?secret=...
-    try:
-        qp = request.query_params
-        for k in ['token', 'secret', 'webhook_secret']:
-            v = qp.get(k)
-            if v:
-                return v.strip()
-    except Exception:
-        pass
-    return None
-
-
-def _event_uid(payload: Dict[str, Any]) -> str:
-    # Prefer strong identifiers from provider
-    for k in ['id', 'event_id', 'delivery_id', 'webhook_id', 'pedido_id', 'order_id', 'subscriptionId', 'subscription_id']:
-        v = payload.get(k)
-        if isinstance(v, (str, int)) and str(v):
-            return f"ll_{k}_{v}"
-    # Fallback: hash of normalized content
-    try:
-        norm = json.dumps(payload, sort_keys=True, ensure_ascii=False)
-    except Exception:
-        norm = str(payload)
-    h = hashlib.sha256(norm.encode('utf-8')).hexdigest()
-    return f"ll_hash_{h[:32]}"
-
-
-def _extract_event_name(payload: Dict[str, Any]) -> str:
-    # Try query param style fallback e.g., payment-success redirect
-    # If payload empty, attempt to parse common names from nested data
-    candidates = [
-        payload.get('event'), payload.get('type'), payload.get('evento'), payload.get('acao'), payload.get('status'),
-    ]
-    for c in candidates:
-        if isinstance(c, str) and c.strip():
-            return c.strip()
-    # Some payloads may nest
-    data = payload.get('data') or {}
-    for k in ['event', 'type', 'status']:
-        v = isinstance(data, dict) and data.get(k)
-        if isinstance(v, str) and v.strip():
-            return v.strip()
-    return 'desconhecido'
-
-
-def _extract_email(payload: Dict[str, Any]) -> Optional[str]:
-    paths = [
-        ['email'], ['cliente', 'email'], ['customer', 'email'], ['buyer', 'email'], ['purchaser', 'email'],
-        ['user', 'email'], ['member', 'email'], ['data', 'email'], ['data', 'customer', 'email'],
-        ['data', 'user', 'email'], ['subscription', 'user', 'email'], ['resource', 'customer', 'email'],
-        ['params', 'email'], ['query', 'email']
-    ]
-    cur: Any = None
-    for p in paths:
-        cur = payload
-        try:
-            for key in p:
-                cur = cur[key]
-            if isinstance(cur, str) and '@' in cur:
-                return cur.strip()
-        except Exception:
-            continue
-    # Fallback robusto: varre o JSON como string e extrai o primeiro e-mail
-    try:
-        dumped = json.dumps(payload, ensure_ascii=False)
-        import re
-        m = re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", dumped)
-        if m:
-            return m.group(0).strip()
-    except Exception:
-        pass
-    return None
-
-
-def _extract_order_id(payload: Dict[str, Any]) -> Optional[str]:
-    paths = [
-        ['order_id'], ['pedido_id'], ['purchase', 'id'], ['order', 'id'], ['data', 'order_id'],
-        ['subscriptionId'], ['data', 'subscriptionId'], ['subscription', 'id']
-    ]
-    for p in paths:
-        cur: Any = payload
-        try:
-            for k in p:
-                cur = cur[k]
-            if isinstance(cur, (str, int)):
-                return str(cur)
-        except Exception:
-            continue
-    return None
-
-
-def _extract_product_code(payload: Dict[str, Any]) -> Optional[str]:
-    paths = [
-        ['product_code'], ['produto', 'codigo'], ['product', 'code'], ['plan', 'code'], ['data', 'product_code'],
-        ['checkout', 'code'], ['plan', 'id'], ['data', 'plan', 'id']
-    ]
-    for p in paths:
-        cur: Any = payload
-        try:
-            for k in p:
-                cur = cur[k]
-            if isinstance(cur, (str, int)) and str(cur):
-                return str(cur)
-        except Exception:
-            continue
-    return None
 
 
 def generate_human_key() -> str:
@@ -204,22 +90,15 @@ def generate_human_key() -> str:
     return f"{block(4)}-{block(4)}-{block(4)}-{block(4)}"
 
 
-async def create_or_get_active_key(email: str, product_code: Optional[str], order_id: Optional[str]) -> PremiumKey:
-    # Idempotente por (email, order_id) se houver
-    email = (email or '').lower()
-    query: Dict[str, Any] = { 'email': email, 'status': 'active' }
-    if order_id:
-        query['order_id'] = order_id
-    elif product_code:
-        query['product_code'] = product_code
-    existing = await db.premium_keys.find_one(query)
-    if existing:
-        return PremiumKey(**existing)
-    # Gera nova
-    key_val = generate_human_key()
-    pk = PremiumKey(key=key_val, email=email, product_code=product_code, order_id=order_id)
-    await db.premium_keys.insert_one(pk.model_dump())
-    return pk
+async def ensure_unique_key() -> str:
+    # Gera uma chave que não colida na base
+    for _ in range(10):
+        k = generate_human_key()
+        existing = await db.premium_keys.find_one({'key': k})
+        if not existing:
+            return k
+    # fallback improvável
+    return f"{uuid.uuid4()}".upper()
 
 
 async def revoke_keys(email: Optional[str] = None, order_id: Optional[str] = None):
@@ -235,7 +114,6 @@ async def revoke_keys(email: Optional[str] = None, order_id: Optional[str] = Non
 @api_router.get("/")
 async def root():
     return {"message": "Hello World"}
-    # Extra: se payload vier vazio mas com query params (caso de GET/redirect), ainda assim não criamos KEY
 
 
 @api_router.post("/status", response_model=StatusCheck)
@@ -251,104 +129,11 @@ async def get_status_checks():
     return [StatusCheck(**status_check) for status_check in status_checks]
 
 
-# ============ Lastlink Webhook ============
-@api_router.post('/webhooks/lastlink', response_model=WebhookAck)
-async def lastlink_webhook(request: Request):
-    # Validate secret/token
-    configured = os.environ.get(SAFE_SECRET_ENV)
-    if not configured:
-        logging.error('LASTLINK_WEBHOOK_SECRET not configured')
-        raise HTTPException(status_code=500, detail='Webhook not configured')
-    provided = _extract_header_secret(request)
-
-    # Access raw body and parse JSON safely (needed in case secret vem no corpo)
-    body_bytes = await request.body()
-    try:
-        payload = json.loads(body_bytes.decode('utf-8')) if body_bytes else {}
-    except Exception:
-        payload = {}
-
-    if not provided:
-        # Fallback: secret no corpo do webhook
-        for k in ['token', 'secret', 'webhook_secret', 'signature']:
-            v = payload.get(k)
-            if isinstance(v, str) and v.strip():
-                provided = v.strip()
-                break
-
-    if not provided or not _constant_time_equals(provided, configured):
-        raise HTTPException(status_code=401, detail='Unauthorized')
-
-    event_name_raw = _extract_event_name(payload).lower()
-    uid = _event_uid(payload)
-
-    # Idempotência: se já processado, só ack
-    already = await db.webhook_events.find_one({'uid': uid})
-    if already:
-        return WebhookAck(received=True, processed=False, event=event_name_raw, idempotent=True)
-
-    # Persist raw event
-    doc = {
-        'id': str(uuid.uuid4()),
-        'uid': uid,
-        'event': event_name_raw,
-        'payload': payload,
-        'headers': {k: v for k, v in request.headers.items()},
-        'received_at': datetime.utcnow(),
-        'processed': False,
-    }
-
-    # Process business logic
-    processed = False
-    try:
-        email = _extract_email(payload)
-        order_id = _extract_order_id(payload)
-        product_code = _extract_product_code(payload)
-
-        # Normalize event labels (Portuguese from Lastlink UI)
-        ev = event_name_raw
-        # Map likely values
-        compra_labels = ['compra completa', 'purchase_complete', 'purchase completed', 'payment_success', 'pagamento confirmado', 'pagamento aprovado']
-        refund_labels = ['pagamento reembolsado', 'refund', 'refunded']
-        chargeback_labels = ['pagamento estornado', 'chargeback', 'dispute']
-        cancel_labels = ['pedido de compra cancelado', 'cancelado', 'order_cancelled']
-
-        if any(x in ev for x in compra_labels):
-            if not email:
-                logging.warning('Compra Completa sem e-mail no payload')
-            else:
-                _ = await create_or_get_active_key(email=email, product_code=product_code, order_id=order_id)
-            processed = True
-        elif any(x in ev for x in refund_labels) or any(x in ev for x in chargeback_labels) or any(x in ev for x in cancel_labels):
-            # Revoga
-            await revoke_keys(email=email, order_id=order_id)
-            processed = True
-        else:
-            # Outros eventos: apenas registrar
-            processed = False
-    except Exception as e:
-        logging.exception(f"Erro processando webhook: {e}")
-        # Não lançar 5xx para não gerar reentrega infinita sem necessidade
-        processed = False
-    finally:
-        doc['processed'] = processed
-        await db.webhook_events.insert_one(doc)
-
-    return WebhookAck(received=True, processed=processed, event=event_name_raw)
+# ============ REMOVIDO: Lastlink Webhook e Claim por e-mail ============
+# Rota antiga /api/webhooks/lastlink e /api/premium/claim foram removidas conforme solicitação
 
 
 # ============ Premium APIs ============
-@api_router.post('/premium/claim', response_model=ClaimResponse)
-async def claim_premium_key(req: ClaimRequest):
-    email = req.email.lower().strip()
-    # Busca chave ativa mais recente para este e-mail
-    key_doc = await db.premium_keys.find_one({'email': email, 'status': 'active'})
-    if not key_doc:
-        raise HTTPException(status_code=404, detail='Nenhuma assinatura ativa encontrada para este e-mail')
-    pk = PremiumKey(**key_doc)
-    return ClaimResponse(key=pk.key, status=pk.status)
-
-
 @api_router.post('/premium/keys/validate', response_model=ValidateKeyResponse)
 async def validate_key(req: ValidateKeyRequest):
     key_raw = (req.key or '').strip()
@@ -360,7 +145,60 @@ async def validate_key(req: ValidateKeyRequest):
     status = key_doc.get('status')
     if status != 'active':
         return ValidateKeyResponse(valid=False, plan='free', status=status)
+    # Checa expiração
+    exp = key_doc.get('expires_at')
+    try:
+        if exp and isinstance(exp, str):
+            # caso legado salvo como string
+            exp = datetime.fromisoformat(exp)
+    except Exception:
+        exp = None
+    if exp and datetime.utcnow() >= exp:
+        return ValidateKeyResponse(valid=False, plan='free', status='expired')
     return ValidateKeyResponse(valid=True, plan='premium', status='active')
+
+
+# ============ Admin APIs ============
+
+def _get_admin_key() -> Optional[str]:
+    return os.environ.get('ADMIN_KEY')
+
+
+def _require_admin(request: Request):
+    auth = request.headers.get('authorization') or request.headers.get('Authorization')
+    if not auth or not auth.lower().startswith('bearer '):
+        raise HTTPException(status_code=401, detail='Unauthorized')
+    provided = auth.split(' ', 1)[1].strip()
+    configured = _get_admin_key()
+    if not configured:
+        raise HTTPException(status_code=500, detail='ADMIN_KEY not configured')
+    if not _constant_time_equals(provided, configured):
+        raise HTTPException(status_code=401, detail='Unauthorized')
+
+
+@api_router.post('/admin/keys/create', response_model=AdminCreateKeyResponse)
+async def admin_create_key(request: Request, body: AdminCreateKeyRequest):
+    _require_admin(request)
+    email = body.email.lower().strip()
+    days = body.days or 30
+    now = datetime.utcnow()
+    # Se já existir uma chave ativa não expirada para este e-mail, reutiliza
+    existing = await db.premium_keys.find_one({'email': email, 'status': 'active'})
+    if existing:
+        exp = existing.get('expires_at')
+        try:
+            if exp and isinstance(exp, str):
+                exp = datetime.fromisoformat(exp)
+        except Exception:
+            exp = None
+        if exp and now < exp:
+            return AdminCreateKeyResponse(key=existing['key'], email=email, expires_at=exp)
+    # Cria nova
+    key_val = await ensure_unique_key()
+    expires_at = now + timedelta(days=days)
+    pk = PremiumKey(key=key_val, email=email, product_code=None, order_id=None, expires_at=expires_at)
+    await db.premium_keys.insert_one(pk.model_dump())
+    return AdminCreateKeyResponse(key=key_val, email=email, expires_at=expires_at)
 
 
 # Include the router in the main app

@@ -35,9 +35,7 @@
                   <button id="generateNow" class="primary-btn" style="flex:1;">
                       🎯 Gerar Resumo Agora
                   </button>
-                  <button id="stopNow" class="secondary-btn stop-btn" style="flex:0 0 auto; display:none;" title="Parar" aria-label="Parar">
-                      ⏹️
-                  </button>
+                  <button id="stopNow" class="secondary-btn stop-btn" style="flex:0 0 auto; display:none;" title="Parar" aria-label="Parar">⏹️</button>
                 </div>
                 
                 <button id="viewHistory" class="secondary-btn">
@@ -76,23 +74,16 @@
                     <small class="setting-description" style="margin-left:0;">Descreva como deseja o tom do resumo</small>
                 </div>
 
-                <!-- Plano e Limites como seção expansível idêntica à de Opções avançadas -->
                 <details id="planSection" class="plan-section" style="border-top:1px solid #e2e8f0; margin-top:8px; padding-top:8px;">
                   <summary>Plano e Limites</summary>
                   <div id="planStatus" class="setting-description" style="margin-left:0; margin-top:8px;">Plano: Free • Hoje: 0/30</div>
                   
                   <div style="display:flex; flex-direction:column; gap:8px; margin-top:10px; align-items:stretch;">
                       <button id="subscribeBtn" class="secondary-btn btn-subscribe" style="flex:0 0 auto;">Assinar Premium</button>
+                      <button id="whatsappKeyBtn" class="secondary-btn" style="flex:0 0 auto;">Receber a KEY (WhatsApp)</button>
                       <button id="applyKeyBtn" class="secondary-btn btn-activate" style="flex:0 0 auto;">Ativar Premium</button>
                   </div>
 
-                  <div class="setting-item" id="claimGroup" style="margin-top:10px;">
-                      <label class="setting-label">Resgatar por e-mail</label>
-                      <input id="claimEmail" type="email" class="setting-select" placeholder="E-mail da compra" style="height:38px; border-radius:8px; width:100%;" />
-                      <button id="claimBtn" class="secondary-btn" style="margin-top:8px;">Resgatar</button>
-                      <small class="setting-description" style="display:block; margin-left:0;">Use o e-mail do checkout para obter sua KEY com segurança. Tentaremos detectar automaticamente o e-mail na aba de confirmação da compra.</small>
-                  </div>
-                  
                   <input id="subscriptionKey" type="text" class="setting-select" placeholder="KEY de ASSINATURA" style="width:100%; margin-top:8px; height:38px; border-radius:8px;" />
                   <small id="subscriptionHint" class="setting-description" style="display:block; margin-left:0;">Insira sua KEY para liberar Premium.</small>
                 </details>

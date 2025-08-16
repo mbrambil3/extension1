@@ -11,8 +11,9 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 const CHECKOUT_URL = 'https://lastlink.com/p/C55E28191/checkout-payment';
+const WHATSAPP_LINK = 'https://wa.me/message/TUOHH5MFFZQSL1';
 const BACKEND_BASE = 'https://premium-unlock-3.preview.emergentagent.com';
-const CLAIM_URL = BACKEND_BASE + '/api/premium/claim';
+const CLAIM_URL = BACKEND_BASE + '/api/premium/claim'; // não usado mais
 
 async function loadQuotaStatus() {
     return new Promise((resolve) => {
@@ -40,11 +41,9 @@ function updatePremiumUI(status) {
     const keyInput = document.getElementById('subscriptionKey');
     const hint = document.getElementById('subscriptionHint');
     const subscribeBtn = document.getElementById('subscribeBtn');
-    const claimGroup = document.getElementById('claimGroup');
     if (!applyBtn || !keyInput || !hint) return;
 
     if (subscribeBtn) { subscribeBtn.classList.toggle('hidden', !!isPremium); }
-    if (claimGroup) { claimGroup.classList.toggle('hidden', !!isPremium); }
 
     if (isPremium) {
         applyBtn.textContent = 'Premium ATIVADO';
@@ -123,72 +122,6 @@ function isValidEmail(email) {
     return /.+@.+\..+/.test(s);
 }
 
-// Detecta e-mail na aba ativa (payment-success)
-async function detectEmailFromActiveTab() {
-    return new Promise((resolve) => {
-        try {
-            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-                const tab = tabs && tabs[0];
-                if (!tab || !tab.url) return resolve(null);
-                try { const u = new URL(tab.url); const email = u.searchParams.get('email'); if (email && /.+@.+\..+/.test(email)) return resolve(email); } catch (e) {}
-                resolve(null);
-            });
-        } catch (e) { resolve(null); }
-    });
-}
-
-// Detecta e-mail procurando a aba pelo título de confirmação
-async function detectEmailFromConfirmTabByTitle() {
-    return new Promise((resolve) => {
-        try {
-            chrome.tabs.query({}, (tabs) => {
-                const titleTarget = 'Assinatura PREMIUM | Auto-Summarizer';
-                const t = (tabs || []).find(tb => typeof tb.title === 'string' && tb.title.trim().toLowerCase() === titleTarget.toLowerCase());
-                if (!t || !t.url) return resolve(null);
-                try { const u = new URL(t.url); const email = u.searchParams.get('email'); if (email && /.+@.+\..+/.test(email)) return resolve(email); } catch (e) {}
-                resolve(null);
-            });
-        } catch (e) { resolve(null); }
-    });
-}
-
-// Fallback: detecta e-mail em qualquer aba de sucesso da Lastlink
-async function detectEmailFromAnySuccessTab() {
-    return new Promise((resolve) => {
-        try {
-            chrome.tabs.query({}, (tabs) => {
-                const candidates = (tabs || []).filter(tb => typeof tb.url === 'string' && /lastlink\.com\/.*payment-success/i.test(tb.url));
-                for (const t of candidates) {
-                    try {
-                        const u = new URL(t.url);
-                        const email = u.searchParams.get('email');
-                        if (email && /.+@.+\..+/.test(email)) return resolve(email);
-                    } catch (e) { /* ignore */ }
-                }
-                resolve(null);
-            });
-        } catch (e) { resolve(null); }
-    });
-}
-
-async function claimByEmail(email) {
-    try {
-        const resp = await fetch(CLAIM_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email })
-        });
-        if (!resp.ok) {
-            const txt = await resp.text().catch(()=> '');
-            throw new Error(txt || 'Falha ao resgatar KEY');
-        }
-        const data = await resp.json();
-        return data; // { key, status }
-    } catch (e) {
-        throw e;
-    }
-}
-
 function setupEventListeners() {
     document.getElementById('autoSummary').addEventListener('change', saveSettings);
     document.getElementById('language').addEventListener('change', saveSettings);
@@ -207,60 +140,10 @@ function setupEventListeners() {
         });
     }
 
-    const claimBtn = document.getElementById('claimBtn');
-    if (claimBtn) {
-        claimBtn.addEventListener('click', async () => {
-            const inputEl = document.getElementById('claimEmail');
-            let email = (inputEl.value || '').trim();
-
-            // 1) Aba ativa
-            let detectedEmail = await detectEmailFromActiveTab();
-            // 2) Se não achou, procurar pela aba de confirmação pelo título informado
-            if (!detectedEmail) detectedEmail = await detectEmailFromConfirmTabByTitle();
-            // 3) Se ainda não, procurar por qualquer "payment-success" da Lastlink
-            if (!detectedEmail) detectedEmail = await detectEmailFromAnySuccessTab();
-
-            if (detectedEmail) {
-                if (!email) {
-                    email = detectedEmail;
-                    try { inputEl.value = detectedEmail; } catch (e) {}
-                    showToast(`E-mail detectado: ${detectedEmail}`, 'success');
-                } else if (email.toLowerCase() !== detectedEmail.toLowerCase()) {
-                    email = detectedEmail;
-                    try { inputEl.value = detectedEmail; } catch (e) {}
-                    showToast(`E-mail digitado diferente. Usando o detectado: ${detectedEmail}`, 'warning');
-                }
-            }
-
-            if (!isValidEmail(email)) { showToast('Informe um e-mail válido do checkout', 'warning'); return; }
-            claimBtn.disabled = true;
-            const original = claimBtn.textContent;
-            claimBtn.textContent = 'Resgatando...';
-            try {
-                const result = await claimByEmail(email);
-                if (!result || !result.key) { showToast('Nenhuma assinatura ativa para este e-mail', 'error'); }
-                else {
-                    const keyInput = document.getElementById('subscriptionKey');
-                    if (keyInput) keyInput.value = result.key;
-                    chrome.runtime.sendMessage({ action: 'applySubscriptionKey', key: result.key }, async (resp) => {
-                        if (resp && resp.success) {
-                            const quota = await loadQuotaStatus();
-                            renderPlanStatus(quota);
-                            updatePremiumUI(quota);
-                            showToast('KEY resgatada e ativada com sucesso!', 'success');
-                            try { document.getElementById('subscriptionKey').value = ''; } catch (e) {}
-                        } else {
-                            showToast('KEY obtida. Clique em Ativar Premium para aplicar.', 'success');
-                        }
-                    });
-                }
-            } catch (e) {
-                const msg = (e && e.message) ? e.message : 'Falha ao resgatar KEY';
-                showToast(msg.includes('404') ? 'Nenhuma assinatura ativa encontrada para este e-mail' : msg, 'error');
-            } finally {
-                claimBtn.disabled = false;
-                claimBtn.textContent = original;
-            }
+    const waBtn = document.getElementById('whatsappKeyBtn');
+    if (waBtn) {
+        waBtn.addEventListener('click', () => {
+            try { chrome.tabs.create({ url: WHATSAPP_LINK }); } catch (e) { window.open(WHATSAPP_LINK, '_blank'); }
         });
     }
 
@@ -322,10 +205,11 @@ function setupEventListeners() {
     });
 }
 
+// Inicia resumo via content script na aba ativa
 function generateSummaryNow() {
     const btn = document.getElementById('generateNow');
     const stopBtn = document.getElementById('stopNow');
-    try { btn.classList.add('loading'); btn.textContent = 'Gerando...'; if (stopBtn) stopBtn.style.display = 'block'; } catch (e) {}
+    try { btn.classList.add('loading'); btn.textContent = 'Gerando...'; if (stopBtn) stopBtn.style.display = 'inline-flex'; } catch (e) {}
     try {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             const tab = tabs && tabs[0];
