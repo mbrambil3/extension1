@@ -653,7 +653,7 @@ ${text.substring(0, 50000)}`;
 async function generateSummaryOR(text) {
   const persona = (summarySettings.persona || '').trim();
   const sys = persona
-    ? `Você é um assistente de resumo. Mantenha exatamente o estilo/persona a seguir durante toda a resposta: ${persona}. Siga as regras de formatação.`
+    ? `Você é um assistente de resumo. Mantenha o TOM/ESTILO indicado, mas NÃO aumente a complexidade/tamanho além do nível de detalhe selecionado: ${persona}. Siga as regras de formatação.`
     : 'Você é um assistente de resumo que retorna lista numerada com tópicos curtos e subitens quando necessário.';
   const messages = [
     { role: 'system', content: sys },
