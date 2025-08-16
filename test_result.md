@@ -102,6 +102,60 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
+
+user_problem_statement: |
+  Integrar pagamento simples com Lastlink para a extensão Chrome Auto-Summarizer:
+  - Usuário acessa o checkout pelo popup
+  - Após confirmação do pagamento via webhook, gerar PREMIUM KEY
+  - Permitir que usuário use a KEY na extensão
+  - Sem renovação automática; se quiser renovar, compra novamente
+
+backend:
+  - task: "Integração Webhook Lastlink + Gestão de PREMIUM KEY"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Implementados endpoints: POST /api/webhooks/lastlink (auth por secret no header, idempotência, processamento de eventos Compra Completa / Reembolso / Estorno / Pedido Cancelado), POST /api/premium/claim e POST /api/premium/keys/validate. Armazenamento em Mongo (collections premium_keys, webhook_events)."
+      - working: true
+        agent: "testing"
+        comment: "Testes do backend passaram: autenticação de webhook (Bearer e X-Webhook-Token), idempotência, criação de chave, revogação e validação funcionam."
+
+frontend:
+  - task: "Adaptar extensão para checkout + validação online da KEY"
+    implemented: false
+    working: "NA"
+    file: "/app/chrome-extension/*"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Aguardando aprovação do usuário para remover MASTER_KEY local e validar KEY via backend; adicionar botão de checkout e atualização para v1.0.6."
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Validar fluxo completo de webhook e emissão de KEY"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: "Backend implementado e testado com sucesso. Aguardando confirmação para adaptar a extensão: (1) adicionar botão de checkout, (2) remover MASTER_KEY local, (3) validar KEY no servidor e refletir revogações."
+
 user_problem_statement: "Teste os novos endpoints do backend e o webhook: POST /api/webhooks/lastlink, POST /api/premium/claim, POST /api/premium/keys/validate"
 
 backend:
