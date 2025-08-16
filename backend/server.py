@@ -308,7 +308,7 @@ async def lastlink_webhook(request: Request):
         # Normalize event labels (Portuguese from Lastlink UI)
         ev = event_name_raw
         # Map likely values
-        compra_labels = ['compra completa', 'purchase_complete', 'purchase completed']
+        compra_labels = ['compra completa', 'purchase_complete', 'purchase completed', 'payment_success', 'pagamento confirmado', 'pagamento aprovado']
         refund_labels = ['pagamento reembolsado', 'refund', 'refunded']
         chargeback_labels = ['pagamento estornado', 'chargeback', 'dispute']
         cancel_labels = ['pedido de compra cancelado', 'cancelado', 'order_cancelled']
