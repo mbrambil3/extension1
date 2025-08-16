@@ -505,6 +505,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const fromPdf = message.source === 'pdf';
       const fileName = message.fileName || 'Documento PDF';
 
+      // Se o usuário for Free, forçar nível efetivo no máximo "long" (bloquear Profundo)
+      const isPrem = deviceStateManager.isPremiumActive(quotaCheck.premium || {});
+      const originalLevel = summarySettings.detailLevel;
+      const mustDowngrade = !isPrem && String(originalLevel || '').toLowerCase() === 'profundo';
+      if (mustDowngrade) summarySettings.detailLevel = 'long';
+
       try {
         const cooldown = await getCooldown();
         if (cooldown > Date.now()) { const secs = Math.ceil((cooldown - Date.now()) / 1000); sendResponse({ success: false, error: `Serviço temporariamente indisponível. Aguarde ${secs}s.` }); return; }
@@ -554,6 +560,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         let display = msg;
         if (msg.includes('503') || /UNAVAILABLE/i.test(msg) || /Failed to fetch/i.test(msg)) display = 'Serviço temporariamente indisponível. Tente novamente em alguns segundos.';
         sendResponse({ success: false, error: display });
+      } finally {
+        // Restaura nível original do usuário
+        if (mustDowngrade) summarySettings.detailLevel = originalLevel;
       }
     })();
     return true;
