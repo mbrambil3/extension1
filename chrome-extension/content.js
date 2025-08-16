@@ -85,9 +85,30 @@ async function extractPDFContent(forceGenerate = false, mode = null) {
       for (let i = 1; i <= Math.min(pdfDoc.numPages, 10); i++) { const page = await pdfDoc.getPage(i); const textContent = await page.getTextContent(); const pageText = textContent.items.map(item => item.str).join(' '); fullText += pageText + '\n'; }
       if (fullText.length > 500) { extractedText = fullText; if (forceGenerate || shouldAutoSummarize(fullText)) { generateSummary(fullText); } }
       else { showErrorPanel('Não foi possível extrair texto suficiente do PDF.'); }
+    } else if (mode === 'fetch_pdf_via_bg') {
+      // Pede o binário do PDF ao background e extrai com PDF.js embutido
+      try {
+        chrome.runtime.sendMessage({ action: 'fetchPdfBinary', url: window.location.href }, async (resp) => {
+          if (!resp || !resp.ok) { showErrorPanel('Falha ao obter PDF: ' + (resp?.error || 'desconhecido')); return; }
+          const b64 = resp.b64 || '';
+          const raw = atob(b64);
+          const len = raw.length; const arr = new Uint8Array(len);
+          for (let i = 0; i < len; i++) arr[i] = raw.charCodeAt(i);
+          const pdfjsLib = window['pdfjsLib'];
+          if (!pdfjsLib) { showErrorPanel('PDF.js não disponível nesta página.'); return; }
+          try { pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('pdfjs/pdf.worker.min.js'); } catch (e) {}
+          const doc = await pdfjsLib.getDocument({ data: arr, disableWorker: true }).promise;
+          let fullText = '';
+          const pages = Math.min(doc.numPages, 10);
+          for (let i = 1; i <= pages; i++) { const page = await doc.getPage(i); const content = await page.getTextContent(); fullText += content.items.map(it => it.str).join(' ') + '\n'; }
+          fullText = (fullText || '').trim();
+          if (fullText.length > 300) { if (forceGenerate || shouldAutoSummarize(fullText)) { generateSummary(fullText); } }
+          else { showErrorPanel('PDF muito curto para gerar resumo.'); }
+        });
+      } catch (e) { showErrorPanel('Erro ao obter PDF: ' + (e?.message || e)); }
     } else {
-      // Não mostrar painel de erro para viewer nativo
-      console.log('PDF no viewer nativo detectado. Use o popup para resumir.');
+      // Viewer nativo sem API e sem modo fetch
+      showErrorPanel('PDF detectado, mas não é possível ler o conteúdo automaticamente nesta aba.');
     }
   } catch (error) { console.error('Erro ao extrair PDF:', error); showErrorPanel('Erro ao extrair conteúdo do PDF.'); }
 }
