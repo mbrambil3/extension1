@@ -79,13 +79,15 @@
                   <div id="planStatus" class="setting-description" style="margin-left:0; margin-top:8px;">Plano: Free • Hoje: 0/30</div>
                   
                   <div style="display:flex; flex-direction:column; gap:8px; margin-top:10px; align-items:stretch;">
-                      <button id="subscribeBtn" class="secondary-btn btn-subscribe" style="flex:0 0 auto;">Assinar Premium</button>
-                      <button id="whatsappKeyBtn" class="secondary-btn" style="flex:0 0 auto;">Receber a KEY (WhatsApp)</button>
+                      <button id="subscribeBtn" class="secondary-btn btn-subscribe" style="flex:0 0 auto; align-self:flex-start; width:auto; padding:10px 14px;">Assinar Premium</button>
+                      <small class="setting-description" style="margin-left:0; margin-top:-2px;">Resumos ILIMITADOS por 30 dias!</small>
+                      <button id="whatsappKeyBtn" class="secondary-btn" style="flex:0 0 auto;">🔑 Receber a KEY via Whatsapp</button>
+
+                      <input id="subscriptionKey" type="text" class="setting-select" placeholder="KEY de ASSINATURA" style="width:100%; margin-top:8px; height:38px; border-radius:8px;" />
+                      <small id="subscriptionHint" class="setting-description" style="display:block; margin-left:0;">Insira sua KEY para liberar Premium.</small>
+
                       <button id="applyKeyBtn" class="secondary-btn btn-activate" style="flex:0 0 auto;">Ativar Premium</button>
                   </div>
-
-                  <input id="subscriptionKey" type="text" class="setting-select" placeholder="KEY de ASSINATURA" style="width:100%; margin-top:8px; height:38px; border-radius:8px;" />
-                  <small id="subscriptionHint" class="setting-description" style="display:block; margin-left:0;">Insira sua KEY para liberar Premium.</small>
                 </details>
 
                 <details id="advancedOptions">
