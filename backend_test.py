@@ -616,12 +616,153 @@ class BackendTester:
             self.log_result("Key Validation Invalid", False, f"Exception: {str(e)}")
             return False
     
+    def test_robustness_scenarios(self) -> bool:
+        """Test specific robustness scenarios from review request"""
+        print("\n=== Testing Robustness Scenarios ===")
+        
+        # Test data from review request
+        test_email = "mbrambila1998@gmail.com"
+        test_order_id = "ORD-UI-1"
+        test_product_code = "C55E28191"
+        
+        try:
+            # 1) Test webhook with Bearer auth and complete purchase
+            print("\n--- Test 1: Webhook with Bearer auth ---")
+            headers_bearer = {
+                'Authorization': f'Bearer {WEBHOOK_SECRET}',
+                'Content-Type': 'application/json'
+            }
+            
+            purchase_payload = {
+                "event": "Compra Completa",
+                "email": test_email,
+                "order_id": test_order_id,
+                "product_code": test_product_code
+            }
+            
+            response1 = self.session.post(
+                f"{API_BASE}/webhooks/lastlink",
+                headers=headers_bearer,
+                json=purchase_payload,
+                timeout=10
+            )
+            
+            if response1.status_code != 200:
+                self.log_result("Robustness Test 1", False, f"Bearer auth failed: {response1.status_code}")
+                return False
+            
+            data1 = response1.json()
+            if not (data1.get('received') and data1.get('processed')):
+                self.log_result("Robustness Test 1", False, f"Purchase not processed: {data1}")
+                return False
+            
+            print(f"✅ Purchase webhook processed: {data1}")
+            
+            # 2) Test webhook with secret in body (no header)
+            print("\n--- Test 2: Webhook with secret in body ---")
+            body_payload = {
+                "event": "Compra Completa",
+                "email": f"body-{test_email}",
+                "order_id": f"{test_order_id}-body",
+                "product_code": test_product_code,
+                "webhook_secret": WEBHOOK_SECRET  # Secret in body
+            }
+            
+            response2 = self.session.post(
+                f"{API_BASE}/webhooks/lastlink",
+                headers={'Content-Type': 'application/json'},  # No auth header
+                json=body_payload,
+                timeout=10
+            )
+            
+            if response2.status_code != 200:
+                self.log_result("Robustness Test 2", False, f"Body secret auth failed: {response2.status_code}")
+                return False
+            
+            data2 = response2.json()
+            if not (data2.get('received') and data2.get('processed')):
+                self.log_result("Robustness Test 2", False, f"Body secret purchase not processed: {data2}")
+                return False
+            
+            print(f"✅ Body secret webhook processed: {data2}")
+            
+            # 3) Test premium claim for the first email
+            print("\n--- Test 3: Premium claim ---")
+            claim_response = self.session.post(
+                f"{API_BASE}/premium/claim",
+                json={"email": test_email},
+                timeout=10
+            )
+            
+            if claim_response.status_code != 200:
+                self.log_result("Robustness Test 3", False, f"Claim failed: {claim_response.status_code}")
+                return False
+            
+            claim_data = claim_response.json()
+            if not claim_data.get('key') or claim_data.get('status') != 'active':
+                self.log_result("Robustness Test 3", False, f"Invalid claim response: {claim_data}")
+                return False
+            
+            print(f"✅ Premium key claimed: {claim_data}")
+            
+            # 4) Test refund webhook (same order_id/email)
+            print("\n--- Test 4: Refund webhook ---")
+            refund_payload = {
+                "event": "Pagamento Reembolsado",
+                "email": test_email,
+                "order_id": test_order_id,  # Same order_id
+                "product_code": test_product_code,
+                "id": f"REFUND-{test_order_id}"  # Different event ID to avoid idempotency
+            }
+            
+            response4 = self.session.post(
+                f"{API_BASE}/webhooks/lastlink",
+                headers=headers_bearer,
+                json=refund_payload,
+                timeout=10
+            )
+            
+            if response4.status_code != 200:
+                self.log_result("Robustness Test 4", False, f"Refund webhook failed: {response4.status_code}")
+                return False
+            
+            data4 = response4.json()
+            if not (data4.get('received') and data4.get('processed')):
+                self.log_result("Robustness Test 4", False, f"Refund not processed: {data4}")
+                return False
+            
+            print(f"✅ Refund webhook processed: {data4}")
+            
+            # 5) Test premium claim again (should return 404)
+            print("\n--- Test 5: Premium claim after refund ---")
+            claim_response2 = self.session.post(
+                f"{API_BASE}/premium/claim",
+                json={"email": test_email},
+                timeout=10
+            )
+            
+            if claim_response2.status_code != 404:
+                self.log_result("Robustness Test 5", False, f"Expected 404, got: {claim_response2.status_code}")
+                return False
+            
+            print(f"✅ Claim after refund correctly returned 404")
+            
+            self.log_result("Robustness Scenarios", True, "All robustness tests passed")
+            return True
+            
+        except Exception as e:
+            self.log_result("Robustness Scenarios", False, f"Exception: {str(e)}")
+            return False
+
     def run_all_tests(self):
         """Run all backend tests"""
         print(f"🚀 Starting Backend API Tests")
         print(f"📍 Base URL: {API_BASE}")
         print(f"🔐 Webhook Secret: {WEBHOOK_SECRET[:8]}...")
         print("=" * 60)
+        
+        # Test robustness scenarios first (from review request)
+        self.test_robustness_scenarios()
         
         # Test webhook authentication
         self.test_webhook_auth_bearer()
