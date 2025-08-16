@@ -223,6 +223,8 @@ async def revoke_keys(email: Optional[str] = None, order_id: Optional[str] = Non
 @api_router.get("/")
 async def root():
     return {"message": "Hello World"}
+    # Extra: se payload vier vazio mas com query params (caso de GET/redirect), ainda assim não criamos KEY
+
 
 @api_router.post("/status", response_model=StatusCheck)
 async def create_status_check(input: StatusCheckCreate):
