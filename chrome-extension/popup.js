@@ -54,7 +54,16 @@ function updatePremiumUI(status) {
         [descSubscribe, descWhats, sep1, sep2].forEach(el => { if (el) el.style.display = isPremium ? 'none' : ''; });
     } catch (e) {}
 
+    const detailSel = document.getElementById('detailLevel');
+    if (!isPremium) {
+        // Bloqueia opção Profundo (PRO) quando Free
+        try { if (detailSel) { const opt = [...detailSel.options].find(o => o.value === 'profundo'); if (opt) { opt.disabled = true; if (detailSel.value === 'profundo') detailSel.value = 'long'; } } } catch(e) {}
+    }
+
     if (isPremium) {
+        // Libera Profundo (PRO)
+        try { if (detailSel) { const opt = [...detailSel.options].find(o => o.value === 'profundo'); if (opt) opt.disabled = false; } } catch(e) {}
+
         applyBtn.textContent = 'Premium ATIVADO';
         applyBtn.disabled = true;
         applyBtn.classList.add('disabled');
