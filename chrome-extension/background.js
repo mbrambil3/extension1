@@ -633,8 +633,10 @@ function buildSummaryInstructions(text) {
     case 'long': detailPrompt = 'Crie um resumo detalhado e abrangente, incluindo seções e subtópicos relevantes.'; break;
     case 'profundo': detailPrompt = 'Crie um resumo EXTREMAMENTE PROFUNDO, LONGO e PRECISO. Estruture em seções claras: (1) Contexto e objetivo; (2) Metodologia (amostra, desenho, instrumentos, análises); (3) Resultados (com números‑chave); (4) Discussão (interpretações e limitações); (5) Implicações práticas e teóricas; (6) Conclusões; (7) Palavras‑chave. Se você listar subtópicos em qualquer seção, EM SEGUIDA EXPANDA CADA SUBTÓPICO com 1‑2 parágrafos explicativos baseados no texto, incluindo números, exemplos e nuances. Evite superficialidade, não invente dados e mantenha o tom/persona definidos.'; break;
   }
+  // A personalidade não pode ampliar tamanho/complexidade além do nível escolhido.
+  // Use persona apenas para tom/linguagem, sem alterar profundidade.
   const persona = (summarySettings.persona || '').trim();
-  const styleLine = persona ? `Adote exatamente o seguinte estilo/persona ao responder (sem quebrar as regras de formatação): ${persona}.` : '';
+  const styleLine = persona ? `Adote apenas o TOM/ESTILO a seguir, sem aumentar profundidade além do nível escolhido: ${persona}.` : '';
   return `${detailPrompt} do seguinte texto em ${summarySettings.language === 'pt' ? 'português' : 'inglês'}.${styleLine ? `\n${styleLine}` : ''}
 
 Regras de formatação (siga exatamente):
