@@ -114,7 +114,7 @@ async function extractPDFContent(forceGenerate = false, mode = null) {
           for (let i = 1; i <= pages; i++) { const page = await doc.getPage(i); const content = await page.getTextContent(); fullText += content.items.map(it => it.str).join(' ') + '\n'; }
           fullText = (fullText || '').trim();
           if (fullText.length > 300) { if (forceGenerate || shouldAutoSummarize(fullText)) { generateSummary(fullText, { source: 'pdf', fileName: (document.title || 'Documento PDF') }); } }
-          else { showErrorPanel('PDF muito curto para gerar resumo.'); }
+          else { if (forceGenerate) { showErrorPanel('PDF muito curto para gerar resumo.'); } }
         });
       } catch (e) { showErrorPanel('Erro ao obter PDF: ' + (e?.message || e)); }
     } else {
