@@ -174,8 +174,18 @@ class DeviceStateManager {
       const migRes = await prom((cb) => chrome.storage.sync.get('as_mig_v105_no_trial', cb));
       const migrated = !!(migRes && migRes.as_mig_v105_no_trial);
       if (!migrated) {
+        // Preserva premium válido (ilimitado ou com until futuro). Apenas limpa estados antigos inválidos
         if (st.premium && st.premium.unlimited !== true) {
-          st.premium = { until: null, unlimited: false, keyMasked: null };
+          let keep = false;
+          try {
+            if (st.premium.until) {
+              const t = new Date(st.premium.until).getTime();
+              if (!isNaN(t) && t > Date.now()) keep = true;
+            }
+          } catch (e) {}
+          if (!keep) {
+            st.premium = { until: null, unlimited: false, keyMasked: null };
+          }
         }
         await prom((cb) => chrome.storage.sync.set({ as_mig_v105_no_trial: true }, cb));
       }
