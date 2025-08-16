@@ -379,6 +379,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })();
     return true;
   }
+  if (message.action === 'fetchPdfBinary') {
+    (async () => {
+      try {
+        const resp = await fetch(message.url, { method: 'GET' });
+        if (!resp.ok) { sendResponse({ ok: false, error: 'HTTP ' + resp.status }); return; }
+        const buf = await resp.arrayBuffer();
+        // Converte para base64
+        let binary = '';
+        const bytes = new Uint8Array(buf);
+        const chunk = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunk) {
+          binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+        }
+        const b64 = btoa(binary);
+        sendResponse({ ok: true, b64 });
+      } catch (e) {
+        sendResponse({ ok: false, error: String(e?.message || e) });
+      }
+    })();
+    return true;
+  }
+
   if (message.action === 'applySubscriptionKey') {
     (async () => {
       const res = await deviceStateManager.applyKey(message.key || '');
