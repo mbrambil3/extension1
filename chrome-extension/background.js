@@ -241,11 +241,7 @@ class DeviceStateManager {
     const key = String(keyRaw || '').trim();
     if (!key || key.length < 6) return { ok: false, error: 'KEY inválida' };
     const norm = key.toUpperCase();
-    if (norm === MASTER_KEY.toUpperCase()) {
-      this.state.premium = { unlimited: true, until: null, keyMasked: this.maskKey(key) };
-      await this.persist();
-      return { ok: true, plan: 'premium_unlimited', premiumUntil: null };
-    }
+    // Removido suporte à MASTER KEY local
     // Validação online da KEY de assinatura no backend
     try {
       const valid = await validateKeyServer(key);
