@@ -78,7 +78,7 @@ function detectAndExtractContent(forceGenerate = false, mode = null) {
   else { extractWebPageContent(forceGenerate); }
 }
 
-async function extractPDFContent(forceGenerate = false) {
+async function extractPDFContent(forceGenerate = false, mode = null) {
   try {
     if (window.PDFViewerApplication && window.PDFViewerApplication.pdfDocument) {
       const pdfDoc = window.PDFViewerApplication.pdfDocument; let fullText = '';
