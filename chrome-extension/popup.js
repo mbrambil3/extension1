@@ -262,11 +262,19 @@ function setupEventListeners() {
             // Verificação automática na aba ativa (página de confirmação)
             let detectedEmail = null;
             try { detectedEmail = await detectEmailFromActiveTab(); } catch (e) { detectedEmail = null; }
+            if (!detectedEmail) {
+                try { detectedEmail = await detectEmailFromAnyTab(); } catch (e) { detectedEmail = null; }
+            }
             if (detectedEmail) {
-                if (!email || email.toLowerCase() !== detectedEmail.toLowerCase()) {
+                if (!email) {
                     email = detectedEmail;
                     try { inputEl.value = detectedEmail; } catch (e) {}
                     showToast(`E-mail detectado na página: ${detectedEmail}`, 'success');
+                } else if (email.toLowerCase() !== detectedEmail.toLowerCase()) {
+                    // Preferimos o da página de confirmação para evitar erros de digitação
+                    email = detectedEmail;
+                    try { inputEl.value = detectedEmail; } catch (e) {}
+                    showToast(`E-mail digitado diferente do detectado. Usando o da página: ${detectedEmail}`, 'warning');
                 }
             }
 
