@@ -320,7 +320,7 @@ async def lastlink_webhook(request: Request):
 # ============ Premium APIs ============
 @api_router.post('/premium/claim', response_model=ClaimResponse)
 async def claim_premium_key(req: ClaimRequest):
-    email = req.email.lower()
+    email = req.email.lower().strip()
     # Busca chave ativa mais recente para este e-mail
     key_doc = await db.premium_keys.find_one({'email': email, 'status': 'active'})
     if not key_doc:
