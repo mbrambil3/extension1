@@ -195,6 +195,7 @@ def generate_human_key() -> str:
 
 async def create_or_get_active_key(email: str, product_code: Optional[str], order_id: Optional[str]) -> PremiumKey:
     # Idempotente por (email, order_id) se houver
+    email = (email or '').lower()
     query: Dict[str, Any] = { 'email': email, 'status': 'active' }
     if order_id:
         query['order_id'] = order_id
