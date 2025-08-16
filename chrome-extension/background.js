@@ -436,8 +436,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === 'applySubscriptionKey') {
     (async () => {
-      const res = await deviceStateManager.applyKey(message.key || '');
+      const key = String(message.key || '')
+      const res = await deviceStateManager.applyKey(key);
       if (!res.ok) { sendResponse({ success: false, error: res.error || 'Falha' }); return; }
+      // Guarda a key crua para revalidação futura
+      try { await setStoredRawKey(key); } catch (e) {}
       // Atualiza snapshot para retorno coerente
       await deviceStateManager.ensureLoaded();
       const { premium } = deviceStateManager.getSnapshot();
