@@ -145,6 +145,9 @@ function setupEventListeners() {
             renderPlanStatus(quota);
             updatePremiumUI(quota);
             showToast(quota.plan === 'premium_unlimited' ? 'Premium Ilimitado ativado!' : 'Premium ativado!', 'success');
+            // Limpa o campo de KEY após sucesso
+            try { document.getElementById('subscriptionKey').value = ''; } catch (e) {}
+
         });
     });
 
