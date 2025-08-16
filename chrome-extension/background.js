@@ -214,8 +214,9 @@ class DeviceStateManager {
   isPremiumActive(premium = null) {
     const p = premium || this.state?.premium || {};
     if (p.unlimited) return true;
+    if (p.active === true) return true;
     if (p.until) {
-      try { const dt = parseExpiry(p.until); return dt && dt.getTime() > Date.now(); } catch { return false; }
+      try { const d = new Date(p.until); return !isNaN(d.getTime()) && d.getTime() > Date.now(); } catch { return false; }
     }
     return false;
   }
