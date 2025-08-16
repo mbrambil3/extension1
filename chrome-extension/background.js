@@ -387,7 +387,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === 'getSettings') {
-    loadSettingsFromStorage(() => sendResponse({ isActive: isExtensionActive, settings: summarySettings }));
+    (async () => { try { await revalidateIfNeeded(); } catch (e) {} finally { loadSettingsFromStorage(() => sendResponse({ isActive: isExtensionActive, settings: summarySettings })); } })();
     return true;
   }
   if (message.action === 'updateSettings') {
