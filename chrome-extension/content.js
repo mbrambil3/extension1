@@ -91,7 +91,7 @@ async function extractPDFContent(forceGenerate = false, mode = null) {
       const pdfDoc = window.PDFViewerApplication.pdfDocument; let fullText = '';
       for (let i = 1; i <= Math.min(pdfDoc.numPages, 10); i++) { const page = await pdfDoc.getPage(i); const textContent = await page.getTextContent(); const pageText = textContent.items.map(item => item.str).join(' '); fullText += pageText + '\n'; }
       if (fullText.length > 500) { extractedText = fullText; if (forceGenerate || shouldAutoSummarize(fullText)) { generateSummary(fullText, { source: 'pdf', fileName: (document.title || 'Documento PDF') }); } }
-      else { showErrorPanel('Não foi possível extrair texto suficiente do PDF.'); }
+      else { if (forceGenerate) { showErrorPanel('Não foi possível extrair texto suficiente do PDF.'); } }
     } else if (mode === 'fetch_pdf_via_bg') {
       // Pede o binário do PDF ao background e extrai com PDF.js embutido
       try {
