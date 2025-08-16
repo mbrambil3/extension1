@@ -370,7 +370,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       const res = await deviceStateManager.applyKey(message.key || '');
       if (!res.ok) { sendResponse({ success: false, error: res.error || 'Falha' }); return; }
-      sendResponse({ success: true, plan: res.plan, premiumUntil: res.premiumUntil });
+      // Atualiza snapshot para retorno coerente
+      await deviceStateManager.ensureLoaded();
+      const { premium } = deviceStateManager.getSnapshot();
+      sendResponse({ success: true, plan: res.plan, premiumUntil: premium.until || res.premiumUntil || null });
     })();
     return true;
   }
