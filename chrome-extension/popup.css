@@ -65,6 +65,16 @@ body { width: 350px; min-height: 400px; font-family: -apple-system, BlinkMacSyst
 .toast.error { background: #e53e3e; }
 .toast.warning { background: #ed8936; }
 
+/* Summaries (Plano e Limites / Opções avançadas) clicáveis */
+#advancedOptions > summary,
+#planSection > summary {
+  cursor: pointer;
+}
+
+/* Botão Parar ainda menor */
+.stop-btn { padding: 4px 8px !important; font-size: 11px !important; line-height: 1; }
+
+
 /* Loading */
 .loading { opacity: 0.6; pointer-events: none; position: relative; }
 .loading::after { content: ''; position: absolute; top: 50%; left: 50%; width: 20px; height: 20px; margin: -10px 0 0 -10px; border: 2px solid #e2e8f0; border-top: 2px solid #4facfe; border-radius: 50%; animation: spin 1s linear infinite; }
