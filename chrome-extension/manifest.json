@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Auto-Summarizer - Resumos instantâneos",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Gera automaticamente resumos de artigos e PDFs usando IA",
   
   "icons": {
