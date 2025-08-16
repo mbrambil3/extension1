@@ -71,9 +71,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-function detectAndExtractContent(forceGenerate = false) {
+function detectAndExtractContent(forceGenerate = false, mode = null) {
   const url = window.location.href;
-  if (url.includes('.pdf') || document.querySelector('embed[type="application/pdf"]') || document.querySelector('object[type="application/pdf"]')) { extractPDFContent(forceGenerate); }
+  const isPdfPage = url.includes('.pdf') || document.querySelector('embed[type="application/pdf"]') || document.querySelector('object[type="application/pdf"]');
+  if (isPdfPage) { extractPDFContent(forceGenerate, mode); }
   else { extractWebPageContent(forceGenerate); }
 }
 
