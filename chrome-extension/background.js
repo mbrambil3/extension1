@@ -242,10 +242,11 @@ class DeviceStateManager {
     // Validação online da KEY de assinatura no backend
     try {
       const valid = await validateKeyServer(key);
-      if (valid) {
-        this.state.premium = { unlimited: false, until: null, keyMasked: this.maskKey(key), keyObf: obfuscateKey(key) };
+      if (valid && valid.ok) {
+        const until = valid.expires_at ? new Date(valid.expires_at) : null;
+        this.state.premium = { unlimited: false, until, keyMasked: this.maskKey(key), keyObf: obfuscateKey(key) };
         await this.persist();
-        return { ok: true, plan: 'premium', premiumUntil: null };
+        return { ok: true, plan: 'premium', premiumUntil: until ? until.toISOString() : null };
       }
       return { ok: false, error: 'KEY inválida' };
     } catch (e) {
