@@ -72,7 +72,7 @@ body { width: 350px; min-height: 400px; font-family: -apple-system, BlinkMacSyst
 }
 
 /* Botão Parar ainda menor */
-.stop-btn { padding: 4px 8px !important; font-size: 11px !important; line-height: 1; }
+.stop-btn { width: 28px !important; height: 28px !important; min-width: 28px !important; min-height: 28px !important; padding: 0 !important; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; font-size: 14px !important; line-height: 1; }
 
 
 /* Loading */
