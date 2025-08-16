@@ -63,6 +63,7 @@ class ValidateKeyResponse(BaseModel):
     valid: bool
     plan: str  # 'premium' | 'free'
     status: Optional[str] = None
+    expires_at: Optional[datetime] = None
 
 # Admin create key
 class AdminCreateKeyRequest(BaseModel):
