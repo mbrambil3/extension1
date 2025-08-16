@@ -137,6 +137,7 @@ def _extract_email(payload: Dict[str, Any]) -> Optional[str]:
     paths = [
         ['email'], ['cliente', 'email'], ['customer', 'email'], ['buyer', 'email'], ['purchaser', 'email'],
         ['user', 'email'], ['member', 'email'], ['data', 'email'], ['data', 'customer', 'email'],
+        ['data', 'user', 'email'], ['subscription', 'user', 'email'], ['resource', 'customer', 'email'],
         ['params', 'email'], ['query', 'email']
     ]
     cur: Any = None
@@ -149,6 +150,15 @@ def _extract_email(payload: Dict[str, Any]) -> Optional[str]:
                 return cur.strip()
         except Exception:
             continue
+    # Fallback robusto: varre o JSON como string e extrai o primeiro e-mail
+    try:
+        dumped = json.dumps(payload, ensure_ascii=False)
+        import re
+        m = re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", dumped)
+        if m:
+            return m.group(0).strip()
+    except Exception:
+        pass
     return None
 
 
