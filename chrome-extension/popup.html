@@ -79,13 +79,20 @@
                   <div id="planStatus" class="setting-description" style="margin-left:0; margin-top:8px;">Plano: Free • Hoje: 0/30</div>
                   
                   <div style="display:flex; flex-direction:column; gap:8px; margin-top:10px; align-items:stretch;">
-                      <button id="subscribeBtn" class="secondary-btn btn-subscribe" style="flex:0 0 auto; align-self:flex-start; width:auto; padding:10px 14px;">Assinar PREMIUM</button>
-                      <small class="setting-description" style="margin-left:0; margin-top:2px;">Resumos ILIMITADOS por 30 dias!</small>
-                      <button id="whatsappKeyBtn" class="secondary-btn" style="flex:0 0 auto; width:40px; align-self:flex-start; display:inline-flex; justify-content:center;">🔑</button>
-                      <small class="setting-description" style="margin-left:0; margin-top:2px;">Receber a KEY via Whatsapp</small>
+                      <div style="display:flex; align-items:center; gap:8px;">
+                        <button id="subscribeBtn" class="secondary-btn btn-subscribe" style="flex:0 0 auto; align-self:flex-start; width:auto; padding:10px 14px;">Assinar PREMIUM</button>
+                        <span class="setting-description" style="margin:0; padding:6px 8px; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:6px;">Resumos ILIMITADOS por 30 dias!</span>
+                      </div>
 
-                      <input id="subscriptionKey" type="text" class="setting-select" placeholder="KEY de ASSINATURA" style="width:100%; margin-top:6px; height:38px; border-radius:8px;" />
-                      <small id="subscriptionHint" class="setting-description" style="display:block; margin-left:0; margin-top:2px;">Insira sua KEY para liberar PREMIUM.</small>
+                      <div style="display:flex; align-items:center; gap:8px;">
+                        <button id="whatsappKeyBtn" class="secondary-btn" style="flex:0 0 auto; width:40px; height:38px; align-self:flex-start; display:inline-flex; justify-content:center; align-items:center;">🔑</button>
+                        <span class="setting-description" style="margin:0; padding:6px 8px; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:6px;">Receber a KEY via Whatsapp</span>
+                      </div>
+
+                      <div style="display:flex; align-items:center; gap:8px;">
+                        <input id="subscriptionKey" type="text" class="setting-select" placeholder="KEY de ASSINATURA" style="width:100%; height:38px; border-radius:8px;" />
+                        <small id="subscriptionHint" class="setting-description" style="display:block; margin:0;">Insira sua KEY para liberar PREMIUM.</small>
+                      </div>
 
                       <button id="applyKeyBtn" class="secondary-btn btn-activate" style="flex:0 0 auto; background: linear-gradient(135deg, #22c55e 0%, #10b981 100%); color: #fff; border: none;">Ativar PREMIUM</button>
                   </div>
