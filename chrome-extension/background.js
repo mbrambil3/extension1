@@ -256,7 +256,7 @@ class DeviceStateManager {
       const valid = await validateKeyServer(key);
       if (valid && valid.ok) {
         const until = valid.expires_at ? new Date(valid.expires_at) : null;
-        this.state.premium = { unlimited: false, until, keyMasked: this.maskKey(key), keyObf: obfuscateKey(key) };
+        this.state.premium = { unlimited: false, until: until ? until.toISOString() : null, keyMasked: this.maskKey(key), keyObf: obfuscateKey(key) };
         await this.persist();
         return { ok: true, plan: 'premium', premiumUntil: until ? until.toISOString() : null };
       }
