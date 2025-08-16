@@ -631,7 +631,7 @@ function buildSummaryInstructions(text) {
     case 'short': detailPrompt = 'Crie um resumo muito breve (máximo 3 pontos principais).'; break;
     case 'medium': detailPrompt = 'Crie um resumo conciso com os pontos principais (5-7 pontos).'; break;
     case 'long': detailPrompt = 'Crie um resumo detalhado e abrangente, incluindo seções e subtópicos relevantes.'; break;
-    case 'profundo': detailPrompt = 'Crie um resumo EXTREMAMENTE PROFUNDO, LONGO e PRECISO. Produza uma síntese estruturada com: (1) Contexto e objetivo do trabalho; (2) Metodologia com detalhes (amostra, desenho, instrumentos, análises); (3) Resultados com números-chave e achados; (4) Discussão com interpretações e limitações; (5) Implicações práticas e teóricas; (6) Conclusões; (7) Palavras‑chave. Evite superficialidade, seja exaustivo, fiel ao texto e mantenha o tom definido na Personalidade.'; break;
+    case 'profundo': detailPrompt = 'Crie um resumo EXTREMAMENTE PROFUNDO, LONGO e PRECISO. Estruture em seções claras: (1) Contexto e objetivo; (2) Metodologia (amostra, desenho, instrumentos, análises); (3) Resultados (com números‑chave); (4) Discussão (interpretações e limitações); (5) Implicações práticas e teóricas; (6) Conclusões; (7) Palavras‑chave. Se você listar subtópicos em qualquer seção, EM SEGUIDA EXPANDA CADA SUBTÓPICO com 1‑2 parágrafos explicativos baseados no texto, incluindo números, exemplos e nuances. Evite superficialidade, não invente dados e mantenha o tom/persona definidos.'; break;
   }
   const persona = (summarySettings.persona || '').trim();
   const styleLine = persona ? `Adote exatamente o seguinte estilo/persona ao responder (sem quebrar as regras de formatação): ${persona}.` : '';
