@@ -213,6 +213,23 @@ async def admin_create_key(request: Request, body: AdminCreateKeyRequest):
     return AdminCreateKeyResponse(key=key_val, email=email, expires_at=expires_at)
 
 
+@api_router.post('/admin/keys/revoke', response_model=AdminRevokeKeyResponse)
+async def admin_revoke_keys(request: Request, body: AdminRevokeKeyRequest):
+    _require_admin(request)
+    # Precisamos de ao menos um critério
+    if not body.email and not body.key and not body.order_id:
+        raise HTTPException(status_code=400, detail='Informe email, key ou order_id')
+    filt: Dict[str, Any] = { 'status': 'active' }
+    if body.email:
+        filt['email'] = body.email.lower().strip()
+    if body.key:
+        filt['key'] = body.key.strip()
+    if body.order_id:
+        filt['order_id'] = body.order_id.strip()
+    result = await db.premium_keys.update_many(filt, { '$set': { 'status': 'revoked', 'updated_at': datetime.utcnow() } })
+    return AdminRevokeKeyResponse(revoked_count=result.modified_count)
+
+
 # Include the router in the main app
 app.include_router(api_router)
 
