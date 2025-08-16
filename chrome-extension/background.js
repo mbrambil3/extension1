@@ -599,10 +599,10 @@ async function validateKeyServer(key) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key })
     });
-    if (!resp.ok) return false;
+    if (!resp.ok) return { ok: false };
     const data = await resp.json();
-    return !!(data && data.valid === true && data.plan === 'premium');
-  } catch (e) { return false; }
+    return { ok: !!(data && data.valid === true && data.plan === 'premium'), expires_at: data?.expires_at || null, raw: data };
+  } catch (e) { return { ok: false, error: String(e?.message || e) }; }
 }
 async function getFromCache(key) { const res = await chrome.storage.local.get('summaryCache'); return (res.summaryCache || {})[key] || null; }
 async function saveToCache(key, value) { const res = await chrome.storage.local.get('summaryCache'); const cache = res.summaryCache || {}; cache[key] = value; const keys = Object.keys(cache); if (keys.length > 100) { let oldestKey = null, oldestTs = Infinity; for (const k of keys) { const ts = cache[k]?.timestamp || 0; if (ts < oldestTs) { oldestTs = ts; oldestKey = k; } } if (oldestKey) delete cache[oldestKey]; } await chrome.storage.local.set({ summaryCache: cache }); }
