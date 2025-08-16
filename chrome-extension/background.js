@@ -571,7 +571,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 async function orRequest(messages, model) {
   await new Promise((resolve) => chrome.storage.sync.get(['summarySettings'], (r) => { if (r && r.summarySettings) summarySettings = { ...summarySettings, ...r.summarySettings }; resolve(); }));
   const headers = { 'Authorization': `Bearer ${getApiKey()}`, 'Content-Type': 'application/json', 'HTTP-Referer': chrome.runtime.getURL(''), 'X-Title': 'Auto-Summarizer OR' };
-  const body = JSON.stringify({ model, messages, temperature: 0.7, max_tokens: 1024 });
+  const body = JSON.stringify({ model, messages, temperature: 0.7, max_tokens: getMaxTokens() });
   const resp = await fetch(OR_URL, { method: 'POST', headers, body, signal: currentAbortController?.signal });
   if (!resp.ok) { const detail = await resp.text(); const err = new Error(`OpenRouter API error: ${resp.status} - ${detail}`); err.status = resp.status; throw err; }
   const data = await resp.json();
