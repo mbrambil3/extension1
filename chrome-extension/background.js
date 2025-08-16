@@ -387,7 +387,36 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.action === 'getSettings') {
-    (async () => { try { await revalidateIfNeeded(); } catch (e) {} finally { loadSettingsFromStorage(() => sendResponse({ isActive: isExtensionActive, settings: summarySettings })); } })();
+    try {
+      chrome.storage.local.get('as_sub_key_raw', (r) => {
+        const raw = r && r.as_sub_key_raw ? String(r.as_sub_key_raw).trim() : '';
+        const proceed = () => loadSettingsFromStorage(() => sendResponse({ isActive: isExtensionActive, settings: summarySettings }));
+        if (!raw) { proceed(); return; }
+        validateKeyServer(raw)
+          .then(async (v) => {
+            try {
+              await deviceStateManager.ensureLoaded();
+              if (!(v && v.ok)) {
+                // Inválida agora: cair para Free e limpar chave salva
+                if (deviceStateManager.state) {
+                  deviceStateManager.state.premium = { until: null, unlimited: false, keyMasked: null };
+                  await deviceStateManager.persist();
+                }
+                try { chrome.storage.local.remove('as_sub_key_raw', () => {}); } catch (e) {}
+              } else {
+                // Ainda válida: sincroniza vencimento
+                const untilIso = v.expires_at ? (new Date(v.expires_at)).toISOString() : null;
+                const masked = (deviceStateManager.state && deviceStateManager.state.premium && deviceStateManager.state.premium.keyMasked) ? deviceStateManager.state.premium.keyMasked : null;
+                deviceStateManager.state.premium = { unlimited: false, until: untilIso, keyMasked: masked };
+                await deviceStateManager.persist();
+              }
+            } catch (e) {}
+          })
+          .finally(proceed);
+      });
+    } catch (e) {
+      loadSettingsFromStorage(() => sendResponse({ isActive: isExtensionActive, settings: summarySettings }));
+    }
     return true;
   }
   if (message.action === 'updateSettings') {
