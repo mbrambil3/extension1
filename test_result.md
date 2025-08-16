@@ -167,6 +167,12 @@ frontend:
       - working: false
         agent: "main"
         comment: "Implementado generateSummaryNow no popup.js para enviar mensagem ao content script e abertura robusta de history.html com getURL + tabs.create + fallback window.open. Ajustes de UI no grupo 'Plano e Limites' e campo de e-mail acima do botão. Aguardando reteste do usuário."
+      - working: false
+        agent: "user"
+        comment: "Claim por e-mail ainda retorna 404 mesmo com e-mail presente na URL da confirmação. Título da aba: 'Assinatura PREMIUM | Auto-Summarizer'."
+      - working: false
+        agent: "main"
+        comment: "Endureci o parser do webhook: extração de email/order/product com mais caminhos + fallback via regex; mapeei mais labels para 'compra completa' (payment_success/pagamento confirmado/aprovado)."
 
 metadata:
   created_by: "main_agent"
