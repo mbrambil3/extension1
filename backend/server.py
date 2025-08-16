@@ -164,7 +164,8 @@ def _extract_email(payload: Dict[str, Any]) -> Optional[str]:
 
 def _extract_order_id(payload: Dict[str, Any]) -> Optional[str]:
     paths = [
-        ['order_id'], ['pedido_id'], ['purchase', 'id'], ['order', 'id'], ['data', 'order_id']
+        ['order_id'], ['pedido_id'], ['purchase', 'id'], ['order', 'id'], ['data', 'order_id'],
+        ['subscriptionId'], ['data', 'subscriptionId'], ['subscription', 'id']
     ]
     for p in paths:
         cur: Any = payload
