@@ -18,9 +18,9 @@ function quickCanStartExtraction() {
   const isPdfUrl = /\.pdf($|\?|#)/i.test(url);
   const hasPdfEmbed = document.querySelector('embed[type="application/pdf"], object[type="application/pdf"]');
   if (isPdfUrl || hasPdfEmbed) {
-    // Não exibir painel de erro para PDFs no viewer nativo; o fluxo deve ser pelo popup
-    if (window.PDFViewerApplication && window.PDFViewerApplication.pdfDocument) { return { canStart: true }; }
-    return { canStart: false, reason: 'PDF detectado. Use o botão "Gerar Resumo Agora" no popup.' };
+    // Se o viewer nativo não expõe PDFViewerApplication, pedimos o arquivo ao background e extraímos com PDF.js no content
+    if (window.PDFViewerApplication && window.PDFViewerApplication.pdfDocument) { return { canStart: true, mode: 'pdfjs_viewer' }; }
+    return { canStart: true, mode: 'fetch_pdf_via_bg' };
   }
   return { canStart: true };
 }
