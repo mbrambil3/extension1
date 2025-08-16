@@ -173,8 +173,8 @@ class DeviceStateManager {
           let keep = false;
           try {
             if (st.premium.until) {
-              const t = new Date(st.premium.until).getTime();
-              if (!isNaN(t) && t > Date.now()) keep = true;
+              const t2 = new Date(st.premium.until).getTime();
+              if (!isNaN(t2) && t2 > Date.now()) keep = true;
             }
           } catch (e) {}
           if (!keep) {
@@ -182,6 +182,21 @@ class DeviceStateManager {
           }
         }
         await prom((cb) => chrome.storage.sync.set({ as_mig_v105_no_trial: true }, cb));
+      }
+    } catch (e) {}
+
+    // Migração v1.0.6: remover premium ilimitado legado (MASTER KEY)
+    try {
+      const migRes2 = await prom((cb) => chrome.storage.sync.get('as_mig_v106_drop_unlimited', cb));
+      const migrated2 = !!(migRes2 && migRes2.as_mig_v106_drop_unlimited);
+      if (!migrated2) {
+        if (st.premium && st.premium.unlimited === true) {
+          st.premium.unlimited = false;
+          st.premium.until = null;
+          st.premium.keyMasked = null;
+          st.premium.keyObf = null;
+        }
+        await prom((cb) => chrome.storage.sync.set({ as_mig_v106_drop_unlimited: true }, cb));
       }
     } catch (e) {}
 
