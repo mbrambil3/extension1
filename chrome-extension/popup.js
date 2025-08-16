@@ -135,18 +135,11 @@ async function detectEmailFromActiveTab() {
         try {
             chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
                 const tab = tabs && tabs[0];
-                if (!tab || !tab.id) return resolve(null);
-                chrome.scripting.executeScript(
-                  { target: { tabId: tab.id }, func: () => location.href },
-                  (results) => {
-                      try {
-                          const href = results && results[0] && results[0].result ? String(results[0].result) : '';
-                          if (!href) return resolve(null);
-                          try { const u = new URL(href); const email = u.searchParams.get('email'); if (email && /.+@.+\..+/.test(email)) return resolve(email); } catch (e) {}
-                          resolve(null);
-                      } catch (e) { resolve(null); }
-                  }
-                );
+                if (!tab) return resolve(null);
+                const href = (tab.url && typeof tab.url === 'string') ? tab.url : '';
+                if (!href) return resolve(null);
+                try { const u = new URL(href); const email = u.searchParams.get('email'); if (email && /.+@.+\..+/.test(email)) return resolve(email); } catch (e) {}
+                resolve(null);
             });
         } catch (e) { resolve(null); }
     });
