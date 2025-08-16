@@ -11,13 +11,7 @@ let summarySettings = {
 
 // Plano/Quota
 const DAILY_LIMIT = 30; // free
-// Mantém a MASTER KEY atual até você nos enviar a nova. Podemos trocar depois rapidamente.
-// MASTER KEY ofuscada (reconstruída em runtime). Técnica simples (XOR) para desestimular inspeção.
-const _mk_x = [
-  77 ^ 7, 65 ^ 7, 83 ^ 7, 84 ^ 7, 69 ^ 7, 82 ^ 7, 45 ^ 7, 54 ^ 7, 80 ^ 7,
-  115 ^ 7, 117 ^ 7, 50 ^ 7, 53 ^ 7, 48 ^ 7, 50 ^ 7, 99 ^ 7, 88 ^ 7, 69 ^ 7, 68 ^ 7
-];
-const MASTER_KEY = String.fromCharCode(..._mk_x.map(n => n ^ 7));
+// MASTER KEY removida (não será mais utilizada).
 
 // Controlador para permitir cancelar a geração em andamento
 let currentAbortController = null;
