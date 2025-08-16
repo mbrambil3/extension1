@@ -631,6 +631,7 @@ function buildSummaryInstructions(text) {
     case 'short': detailPrompt = 'Crie um resumo muito breve (máximo 3 pontos principais)'; break;
     case 'medium': detailPrompt = 'Crie um resumo conciso com os pontos principais (5-7 pontos)'; break;
     case 'long': detailPrompt = 'Crie um resumo detalhado e abrangente'; break;
+    case 'profundo': detailPrompt = 'Crie um resumo extremamente profundo, longo e abrangente, com alto nível de detalhamento e nuance'; break;
   }
   const persona = (summarySettings.persona || '').trim();
   const styleLine = persona ? `Adote exatamente o seguinte estilo/persona ao responder (sem quebrar as regras de formatação): ${persona}.` : '';
