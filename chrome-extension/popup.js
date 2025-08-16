@@ -207,7 +207,7 @@ async function detectEmailFromAnyTab() {
     });
 }
 
-async function claimByEmail(email) {
+
     try {
         const resp = await fetch(CLAIM_URL, {
             method: 'POST',
