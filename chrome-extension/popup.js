@@ -292,7 +292,7 @@ function setupEventListeners() {
                 const pages = Math.min(doc.numPages, 10);
                 for (let i = 1; i <= pages; i++) { const page = await doc.getPage(i); const content = await page.getTextContent(); fullText += content.items.map(it => it.str).join(' ') + '\n'; }
                 fullText = (fullText || '').trim();
-                if (!fullText || fullText.length &lt; 50) { showToast('Não foi possível extrair texto do PDF', 'error'); return; }
+                if (!fullText || fullText.length < 50) { showToast('Não foi possível extrair texto do PDF', 'error'); return; }
                 const payload = `Arquivo: ${file.name}\n\n${fullText.substring(0, 50000)}`;
                 showToast('Importando PDF... O resumo aparecerá no Histórico em instantes.', 'success');
                 chrome.runtime.sendMessage({ action: 'generateSummary', text: payload, source: 'pdf', fileName: file.name }, (response) => {
