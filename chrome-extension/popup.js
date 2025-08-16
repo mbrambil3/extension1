@@ -46,6 +46,13 @@ function updatePremiumUI(status) {
 
     if (subscribeBtn) { subscribeBtn.classList.toggle('hidden', !!isPremium); }
     if (waBtn) { waBtn.classList.toggle('hidden', !!isPremium); }
+    try {
+        const descSubscribe = document.getElementById('descSubscribe');
+        const descWhats = document.getElementById('descWhats');
+        const sep1 = document.getElementById('sep1');
+        const sep2 = document.getElementById('sep2');
+        [descSubscribe, descWhats, sep1, sep2].forEach(el => { if (el) el.style.display = isPremium ? 'none' : ''; });
+    } catch (e) {}
 
     if (isPremium) {
         applyBtn.textContent = 'Premium ATIVADO';
