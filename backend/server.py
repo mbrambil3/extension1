@@ -136,7 +136,8 @@ def _extract_event_name(payload: Dict[str, Any]) -> str:
 def _extract_email(payload: Dict[str, Any]) -> Optional[str]:
     paths = [
         ['email'], ['cliente', 'email'], ['customer', 'email'], ['buyer', 'email'], ['purchaser', 'email'],
-        ['user', 'email'], ['member', 'email'], ['data', 'email'], ['data', 'customer', 'email']
+        ['user', 'email'], ['member', 'email'], ['data', 'email'], ['data', 'customer', 'email'],
+        ['params', 'email'], ['query', 'email']
     ]
     cur: Any = None
     for p in paths:
